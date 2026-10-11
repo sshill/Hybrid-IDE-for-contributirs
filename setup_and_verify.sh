@@ -74,9 +74,9 @@ if [ -f "${ENV_FILE}" ]; then
     fi
 else
     echo -e "  ${YELLOW}🟡 Файл ~/.env відсутній.${NC}"
-    echo -e "  👉 Створіть його командою:"
-    echo -e "     echo 'GEMINI_API_KEY=\"ваш_ключ_google_ai_pro\"' >> ~/.env"
-    echo -e "     echo 'GROQ_API_KEY=\"ваш_ключ_groq\"' >> ~/.env"
+    echo -e "  👉 Скопіюйте шаблон та додайте ваші ключі:"
+    echo -e "     cp .env.example ~/.env && chmod 600 ~/.env"
+    echo -e "     nano ~/.env"
 fi
 
 # 5. Бойова перевірка інференсу агентів
