@@ -1,0 +1,27 @@
+name: Policy and Core Validation CI
+
+on:
+  push:
+    branches: [ main, v0.8, master ]
+  pull_request:
+    branches: [ main, v0.8, master ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify Python AST and Syntax (core/ py_compile)
+        run: |
+          python3 -m py_compile core/**/*.py
+
+      - name: Run 34-Point General Execution Policy Validator
+        run: |
+          python3 core/verify/validate_general_policy.py --policy config/GEMINI.template.md

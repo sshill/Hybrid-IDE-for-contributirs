@@ -1,0 +1,23 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment and secrets
+.env
+*.env
+.env.*
+
+# Logs and runtime caches
+*.log
+/tmp/
+antigravity_provenance_ledger.json
+
+# IDE and OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+scratch/

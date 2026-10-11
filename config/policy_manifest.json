@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Antigravity General Execution Policy Manifest v0.8.3",
+  "version": "0.8.3",
+  "branch": "v0.8",
+  "updated_at": "2026-10-11T11:00:00+03:00",
+  "policy_document": "/home/hills/Documents/GEMINI.md",
+  "validator_script": "/home/hills/Documents/.agents/scripts/validate_general_policy.py",
+  "antigravity_mgr": "/home/hills/Documents/Antigravity_Mgr",
+  "stable_runners": [
+    "/home/hills/Documents/.agents/scripts/diagnostic_runner.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase1_inspect.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase2_router.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase5_verify.py"
+  ],
+  "lifecycle": {
+    "phases": 5,
+    "phase_1_requirements": {
+      "mandatory_status_banner": true,
+      "context_hygiene_indicator": true,
+      "git_first_discovery": true,
+      "orchestrator_first_assessment": true,
+      "ai_synthesis_pipeline": true,
+      "diagnostic_batch_access": true,
+      "no_exceptions_for_information_gathering": true,
+      "silent_looping_prohibited": true,
+      "online_escalation_protocol": true,
+      "absence_verification_gate": true
+    },
+    "phase_2_requirements": {
+      "implementation_plan_artifact": true,
+      "pre_flight_routing_matrix": true,
+      "dynamic_throughput_routing_model": true,
+      "routellm_sla_model": true,
+      "litellm_safe_budget_guard": true
+    },
+    "phase_3_requirements": {
+      "approval_gate": true,
+      "batch_execution_access": true,
+      "forbidden_without_approval": [
+        "git reset",
+        "git revert",
+        "git restore",
+        "git merge",
+        "git push origin"
+      ]
+    },
+    "phase_4_requirements": {
+      "execution_status_report": true,
+      "primary_workhorse_ollama": true,
+      "hardware_fallback_groq": true,
+      "pre_implementation_arbiter_claude": true,
+      "git_first_local_access": true,
+      "modified_objects_accounting": true,
+      "step_budget_limit": 20,
+      "circuit_breaker_enabled": true,
+      "pre_tool_hard_deny_gate": true,
+      "zero_inline_eval_hard_gate": true,
+      "host_first_execution_protocol": true,
+      "synthesize_script_runner": true,
+      "frugalgpt_cascade_pipeline": true,
+      "adaptive_socket_timeout": true,
+      "eval_flag_purged": true
+    },
+    "phase_5_requirements": {
+      "walkthrough_artifact": true,
+      "functional_verification_checklist": true,
+      "ai_providers_execution_report": true
+    }
+  },
+  "hardware_bounds": {
+    "host_platform": "Intel Core 3 100U / Linux",
+    "host_ram_gb": 16,
+    "local_ollama_max_parameter_size": "7B",
+    "forbidden_local_models": ">=14B"
+  },
+  "ai_architecture_tiers": {
+    "orchestrator_tier_0": {
+      "provider": "Antigravity (Gemini 3.8 Flash High)",
+      "sequence_order": "First in chronological order",
+      "role": "Task assessment, 5-phase orchestration, Git-first buffer extraction, prompt design, result control. NEVER codes itself. Physically guarded by Zero Inline-Eval Gate in pre_tool_hook.py."
+    },
+    "tier_1_primary_workhorse": {
+      "provider": "Ollama Local Edge",
+      "models": ["qwen2.5-coder:1.5b", "qwen2.5-coder:3b", "qwen2.5-coder:7b"],
+      "endpoint": "http://127.0.0.1:11434",
+      "context_limit_tokens": 3000,
+      "role": "Primary Workhorse: all initial code synthesis, diffs, AST checks, scripts, PlantUML diagrams. Zero-friction local access."
+    },
+    "tier_2_hardware_fallback_hub": {
+      "provider": "Groq Cloud LPU & OpenRouter",
+      "endpoint": "https://api.groq.com/openai/v1",
+      "models": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"],
+      "activation_condition": "Exclusively invoked when context exceeds 3000 tokens, SLA timeout exceeds threshold, RAM bounds are reached, or FrugalGPT cascade is triggered",
+      "role": "High-speed hardware overflow (>350-460 tok/s)",
+      "safe_operating_budget": {
+        "safety_margin_percentage": 20,
+        "safe_tpm": 6400,
+        "safe_rpm": 800,
+        "max_single_out_tokens": 3200
+      }
+    },
+    "tier_3_knowledge_caching": {
+      "path": "docs/knowledge/",
+      "rule": "Zero repeat web search or disk crawlings if cached manifest exists",
+      "online_escalation_protocol": {
+        "enabled": true,
+        "gates": [
+          "Gate 1: Local Git & docs/knowledge/ First (Ollama)",
+          "Gate 2: Absence Verification Gate (negative evidence confirmation in chat)",
+          "Gate 3: Targeted Online Search exclusively via Antigravity (search_web / read_url_content)",
+          "Gate 4: Mandatory Knowledge Ingestion into docs/knowledge/ on Git before model processing"
+        ]
+      }
+    },
+    "tier_4_pre_implementation_arbiter": {
+      "provider": "Antigravity Pool (Anthropic Claude Sonnet 5.5)",
+      "models": ["claude-sonnet-5-5", "gpt-oss-120b"],
+      "role": "Strictly pre-implementation / release gate audit before final commit and push ([CODE_AUDIT_REPORT])"
+    },
+    "tier_5_golden_standard_validator": {
+      "provider": "System Validator / Antigravity",
+      "role": "validate_general_policy.py, Caprica/Wine, Pytest, HIL bus timing verification"
+    }
+  },
+  "bridge_slash_command": {
+    "syntax": "/bridge [version]",
+    "default_behavior": "Dynamic auto-detection of latest active settings and branch policy (v0.8)",
+    "explicit_version_behavior": "Loads target policy manifest from docs/knowledge/index/policy_<version>_manifest.json",
+    "formula_components": 3
+  },
+  "principal_slash_command": {
+    "syntax": "/principal",
+    "architect_profile": "Serhii Khylevych (Principal Systems Architect)"
+  },
+  "reglament_slash_command": {
+    "syntax": "/reglament [or /reglamet]",
+    "skill_file": ".agents/skills/reglament/SKILL.md",
+    "purpose": "Session compliance audit, AI pre-flight healthcheck, Antigravity_Mgr validation, and Anti-DIY hard gate lock"
+  }
+}

@@ -1,0 +1,193 @@
+@startuml process_v0_8_flow
+autonumber "<b>[00]</b>"
+title <b>Antigravity Execution Policy & Multi-Tier AI Architecture (v0.8)</b>\n<i>Канонічний Sequence Diagram: Першість Оркестратора, Ollama Primary Workhorse, Groq Fallback Hub</i>
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam defaultFontName "DejaVu Sans, Liberation Sans, sans-serif"
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign center
+skinparam sequenceLifeLineBorderColor #4A5568
+skinparam sequenceLifeLineBackgroundColor #EDF2F7
+
+skinparam participant {
+    BorderColor #2D3748
+    FontColor #1A202C
+    FontStyle bold
+    FontSize 12
+}
+
+skinparam actor {
+    BorderColor #2D3748
+    FontColor #1A202C
+    FontStyle bold
+    FontSize 12
+}
+
+skinparam note {
+    BorderColor #CBD5E0
+    BackgroundColor #F7FAFC
+    FontColor #2D3748
+    FontSize 10
+}
+
+skinparam box {
+    BorderColor #CBD5E0
+    FontSize 12
+    FontStyle bold
+}
+
+box "Клієнтський рівень" #F7FAFC
+actor "Користувач\n(User)" as User #E2E8F0
+end box
+
+box "Оркестрація та Локальна Безпека" #EDF2F7
+control "Antigravity\n(Orchestrator - FIRST)" as AGY #BEE3F8
+database "Локальний Git\n(Git-First Buffer)" as Git #FEEBC8
+entity "Pre-Tool Hook\n(Hard Deny Gate)" as Hook #FED7D7
+collections "docs/knowledge/\n(Tier 3: Індекс знань)" as Cache #FEFCBF
+end box
+
+box "Рівень 1: Primary Workhorse" #E6FFFA
+participant "Local Edge Ollama\n(qwen2.5-coder <=7B)" as Ollama #B2F5EA
+end box
+
+box "Рівень 2: Hardware Fallback Hub" #FAF5FF
+participant "Groq Cloud LPU\n(120B / 27B / 70B Overflow)" as CloudHub #E9D8FD
+end box
+
+box "Рівень 4: Pre-Implementation Arbiter" #EBF8FF
+participant "Claude Sonnet 5.5\n(Antigravity Pool)" as Claude #C3DAFE
+end box
+
+box "Рівень 5: Golden Standard" #F0FFF4
+participant "System Validator\n(HIL / Caprica / Pytest)" as Engine #C6F6D5
+end box
+
+== ФАЗА 1: ДІАГНОСТИКА ТА ОРКЕСТРАЦІЯ (ANTIGRAVITY FIRST) ==
+
+User -> AGY: <b>Запит на задачу / зміну</b>\n<i>"Оновити архітектуру та згенерувати потік виконання v0.8"</i>
+activate AGY
+
+note over AGY
+  <b>Імператив Першості Оркестратора:</b>
+  1. AGY перший за черговістю: оцінка задачі, побудова 5 фаз.
+  2. AGY читає файли через буфер Git-First (zero-friction).
+  3. <b>ПИСАТИ КОД ВІД СЕБЕ СУВОРО ЗАБОРОНЕНО!</b>
+  4. AGY формує промпти для профільних нейромереж.
+end note
+
+AGY -> Git: <b>Git & Index First:</b>\n<font color=blue>`git status -s && git log -n 5 --oneline`</font>
+Git --> AGY: <font color=navy>`branch: v0.7/v0.8, HEAD: commit_hash, clean tree`</font>
+
+AGY -> Cache: <b>Читання кешованого маніфесту:</b>\n<font color=blue>`git show HEAD:docs/knowledge/index/policy_v0.8_manifest.json`</font>
+Cache --> AGY: <font color=navy>`JSON Manifest v0.8: {"lifecycle": 5, "primary": "Ollama", "fallback": "Groq"}`</font>
+
+AGY -> User: <b>Phase 1 Status Banner:</b>\n<font color=green>[Домен: Policy v0.8 | Контекст: 🟢 | Sandbox: Standard | Batch: Granted]</font>
+
+== ФАЗА 2: РЕПОРТ З ПАКЕТОМ ЗМІН (PROPOSED CHANGES REPORT / PLAN) ==
+
+AGY -> AGY: <b>Синтез плану та матриці маршрутизації:</b>\n<font color=blue>write_to_file: implementation_plan.md</font>\n<i>(AI Routing Matrix v0.8, Package list, Verification checklist)</i>
+
+== ФАЗА 3: ПІДТВЕРДЖЕННЯ ТА BATCH ACCESS (APPROVAL GATE) ==
+
+AGY -> User: <b>Запит схвалення пакета змін:</b>\n<i>"implementation_plan.md сформовано. Підтвердіть (+)"</i>
+
+User -> AGY: <b>Явне підтвердження:</b>\n<font color=green><b>"+"</b> (Санкція на імплементацію та Batch Execution Access)</font>
+
+== ФАЗА 4: ЗАСТОСУВАННЯ ЗМІН (PRIMARY OLLAMA & GROQ FALLBACK) ==
+
+note over AGY, Hook
+  <b>Запобіжники та бюджет дій:</b>
+  - Step Budget: <= 20 дій на ітерацію виконання.
+  - Circuit Breaker: відсікач після 2 послідовних збоїв.
+  - Pre-Tool Hook: захист від деструктивних дій.
+end note
+
+group Пре-тул валідація команди (Pre-Tool Hard Deny Gate)
+  AGY -> Hook: <b>Інспекція перед виконанням:</b>\n<font color=blue>PreToolHook.inspect(tool="run_command", cmd="<cmd>")</font>
+  activate Hook
+
+  alt Спроба деструктивної дії (git reset / revert / push origin)
+    Hook --> AGY: <font color=red><b>DENY:</b> {"decision":"deny", "reason":"Blocked forbidden command"}</font>
+    AGY -> User: <font color=red><b>Аварійна зупинка:</b> Деструктивну дію заблоковано Pre-Tool Hook!</font>
+  else Авторизована операція
+    Hook --> AGY: <font color=green><b>ALLOW:</b> {"decision":"allow", "reason":"Approved sandboxed command"}</font>
+  end
+  deactivate Hook
+end
+
+group Первинна генерація коду (Local Edge Ollama — Primary Workhorse)
+  AGY -> Ollama: <b>Запуск генерації / AST перевірки через diagnostic_runner.py:</b>\n<font color=blue>python3 .agents/scripts/diagnostic_runner.py --ollama-query "<prompt>" --model qwen2.5-coder:1.5b</font>
+  activate Ollama
+  Ollama --> AGY: <font color=navy>Синтезований код / AST аналіз (Час: ~15-25с, Вердикт: SUCCESS)</font>
+  deactivate Ollama
+
+  AGY -> User: <b>Chat-Screen AI Invocation Widget:</b>\n<font color=darkgreen>> [!NOTE] AI Invocation: Local Ollama qwen2.5-coder:1.5b | Code Synthesis | SUCCESS</font>
+end
+
+opt Аварійний оверфлоу при виході за ліміти Ollama (Groq Cloud LPU Fallback)
+  note over AGY, CloudHub
+    <b>Умова активації Groq Fallback:</b>
+    - Контекст завдання > 3000 токенів.
+    - Ризик перевантаження RAM лаптопа (16 GB) або потреба у 120B/27B.
+  end note
+  AGY -> CloudHub: <b>Експрес-інференс (LPU Hardware Inference):</b>\n<font color=blue>python3 .agents/scripts/diagnostic_runner.py --groq-query "<large_context>" --model openai/gpt-oss-120b</font>
+  activate CloudHub
+  CloudHub --> AGY: <font color=navy>Згенерований результат (Час: ~0.4-1.2с, Швидкість: >400 tok/s)</font>
+  deactivate CloudHub
+
+  AGY -> User: <b>Chat-Screen AI Invocation Widget:</b>\n<font color=darkgreen>> [!NOTE] AI Invocation: Groq LPU gpt-oss-120b | Hardware Fallback Overflow | SUCCESS</font>
+end
+
+group Релізний аудит перед імплементацією (Рівень 4: Pre-Implementation Arbiter)
+  note over AGY, Claude
+    <b>Pre-Implementation Gate:</b>
+    Суворо перед фіксацією складних сценаріїв та релізом.
+  end note
+  AGY -> Claude: <b>Поглиблений релізний аудит (Antigravity Pool):</b>\n<font color=blue>invoke_subagent(Role="Tier 4 Release Arbiter", Prompt="Release audit: <diff>")</font>
+  activate Claude
+  Claude --> AGY: <font color=navy><b>[CODE_AUDIT_REPORT]</b>\nVerdict: PASS / APPROVED\nArchitecture: Verified</font>
+  deactivate Claude
+
+  AGY -> User: <b>Chat-Screen AI Invocation Widget:</b>\n<font color=darkgreen>> [!NOTE] AI Invocation: Claude Sonnet 5.5 | Pre-Implementation Arbiter | PASS</font>
+end
+
+group Застосування та Автономний локальний коміт (Git-First Local Access)
+  AGY -> Git: <b>Читання через буфер:</b> <font color=blue>`git show HEAD:<file>`</font>
+  Git --> AGY: <font color=navy>Сирий буфер файлу</font>
+  AGY -> Git: <b>Запис та локальний коміт:</b>\n<font color=blue>replace_file_content / write_to_file</font>\n<font color=blue>`git commit -m "feat: description [verified: antigravity]"`</font>
+  Git --> AGY: <font color=navy>`[v0.8 abc1234] feat: description`</font>
+end
+
+== ФАЗА 5: ПЕРЕВІРКА ФУНКЦІОНАЛУ ТА ВЕРДИКТ (FUNCTIONAL VERIFICATION) ==
+
+AGY -> Engine: <b>Запуск верифікатора політики та тестів:</b>\n<font color=blue>`python3 .agents/scripts/validate_general_policy.py && pytest`</font>
+activate Engine
+Engine --> AGY: <font color=navy><b>100% checks PASS</b> | HIL & Policy Verified</font>
+deactivate Engine
+
+AGY -> Cache: <b>Фіксація знань у локальному Git (Рівень 3):</b>\n<font color=blue>`write_to_file: docs/knowledge/index/policy_v0.8_manifest.json`</font>\n<font color=blue>`git commit -m "docs(knowledge): deploy v0.8 manifest and flow diagram [verified: antigravity]"`</font>
+Cache --> AGY: <font color=navy>Маніфест та діаграма зафіксовані в Git</font>
+
+AGY -> User: <b>Фінальний звіт (Walkthrough & Multi-AI Report):</b>\n<font color=green>walkthrough.md + Чек-лист перевірки + Звіт провайдерів (Ollama, Groq, Claude, AGY)</font>
+
+== ОНЛАЙН СИНХРОНІЗАЦІЯ (ONLINE PUSH APPROVAL GATE) ==
+
+note over AGY, User
+  <b>Суворий гейт віддаленого пушу:</b>
+  Будь-які операції git push вимагають окремого дозволу користувача.
+end note
+
+AGY -> User: <b>Запит на онлайн публікацію:</b>\n<i>"Реліз v0.8 верифіковано локально. Санкціонуєте git push origin?"</i>
+
+User -> AGY: <b>Окреме схвалення:</b>\n<font color=green><b>"Дозволяю онлайн-пуш"</b></font>
+
+AGY -> Git: <b>Відправка релізу онлайн:</b>\n<font color=blue>`git push origin v0.8`</font>
+Git --> AGY: <font color=navy>`To https://github.com/... [new branch] v0.8 -> v0.8`</font>
+
+AGY -> User: <b>Підтвердження успішного завершення</b>
+deactivate AGY
+
+@enduml
