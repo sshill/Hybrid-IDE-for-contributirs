@@ -4,8 +4,8 @@ description: >-
   Generates a canonical Bridge Prompt to transition context to a new chat
   upon context exhaustion or milestone completion. Invoked as /bridge [version].
   By default (no argument), dynamically activates the latest settings and active
-  policy version (v0.8.3+). If a version is explicitly specified after a space
-  (e.g. /bridge v0.6), targets that specific version.
+  policy version (v0.9.0+). If a version is explicitly specified after a space
+  (e.g. /bridge v0.8, /bridge v0.6), targets that specific version.
 ---
 
 # Bridge Prompt Generator (Dynamic Latest Settings / Explicit Version)
@@ -16,17 +16,17 @@ Use this skill whenever the user types `/bridge` (with or without arguments) or 
 
 - **`/bridge` (без аргументу):**
   Автоматично визначає та застосовує **найновіші активні налаштування**.
-  Динамічно зчитує поточну активну гілку Git (`git branch --show-current`) та найсвіжіший маніфест знань у `Antigravity_Mgr/artifacts/policy_v0.8_manifest.json` (регламент v0.8.3).
-- **`/bridge <версія>` (з аргументом через пробіл, наприклад `/bridge v0.6` або `/bridge v0.7`):**
-  Активує та генерує міст суворо під зазначену версію політики з відповідного маніфесту (наприклад, `policy_v0.6_manifest.json`).
+  Динамічно зчитує поточну активну гілку Git (`git branch --show-current`) та найсвіжіший маніфест знань у `Antigravity_Mgr/artifacts/policy_v0.9_manifest.json` або `docs/knowledge/index/policy_v0.9_manifest.json` (регламент v0.9.0).
+- **`/bridge <версія>` (з аргументом через пробіл, наприклад `/bridge v0.8` або `/bridge v0.7`):**
+  Активує та генерує міст суворо під зазначену версію політики з відповідного маніфесту (наприклад, `policy_v0.8_manifest.json`).
 
 ## Instructions for the Agent
 
 When this skill is triggered:
 1. **Argument Parsing & Resolution:**
    - Перевірити вхідний рядок виклику.
-   - Якщо вказано версію через пробіл (наприклад, `v0.6`, `v0.7`): обрати цю версію як цільову.
-   - Якщо версію не вказано: за замовчуванням обрати найновішу активну версію системи (наразі `v0.8.3` / активна гілка `v0.8`).
+   - Якщо вказано версію через пробіл (наприклад, `v0.8`, `v0.7`): обрати цю версію як цільову.
+   - Якщо версію не вказано: за замовчуванням обрати найновішу активну версію системи (наразі `v0.9.0` / активна гілка `v0.8` або `v0.9`).
 2. **Quick Git Snapshot (Git First & Pure Command Shapes):**
    Run strictly as separate single commands:
    `git status -sb`
@@ -34,13 +34,14 @@ When this skill is triggered:
    (Do NOT use `&&`, `||`, pipes `|`, or raw crawlers `view_file`/`list_dir`).
 3. **Collect Active State & Manifests:**
    - Active branch and latest commit hash.
+   - Target project path (`/home/hills/Documents/Hybrid-IDE-for-contributors`) & GitHub repository (`https://github.com/sshill/Hybrid-IDE-for-contributirs.git`).
    - Latest `walkthrough.md` location in `Antigravity_Mgr/artifacts/`.
-   - Manifest corresponding to the resolved version (`policy_v0.8_manifest.json` v0.8.3).
+   - Manifest corresponding to the resolved version (`policy_v0.9_manifest.json` v0.9.0).
 4. **Generate Canonical Bridge Prompt:**
    Output immediately a ready-to-copy markdown block following this strict structure:
    - **Перший рядок (Recommended Directive Title):** Чітка, однозначна назва без двозначностей та простору для галюцинацій:
-     `# 🌉 Регламентний старт: Аудит зв'язку з ШІ-агентами, статус Git та засвоєння контексту v0.8.3`
-   - **1. Метадані стану та середовища:** Версія v0.8.3, Parent Conversation ID, маніфест, стан гілок.
+     `# 🌉 Регламентний старт: Аудит зв'язку з ШІ-агентами, статус Git та засвоєння контексту v0.9.0`
+   - **1. Метадані стану та середовища:** Версія v0.9.0, Parent Conversation ID, маніфест, стан гілок, цільовий каталог (`/home/hills/Documents/Hybrid-IDE-for-contributors`) та GitHub-репозиторій (`https://github.com/sshill/Hybrid-IDE-for-contributirs.git`).
    - **2. Імперативний поетапний протокол (Strict Step-by-Step Gate):**
      - **Крок 1 (Обов'язковий старт — ШІ-агенти та Git):**
        1. Вивести Phase 1 Status Banner.

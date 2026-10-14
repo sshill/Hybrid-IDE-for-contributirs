@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Діагностичний валідатор Генеральної політики GEMINI.md (v0.8).
+Діагностичний валідатор Генеральної політики GEMINI.md (v0.8 / v0.9).
 Шлях: /home/hills/Documents/.agents/scripts/validate_general_policy.py
 
 Перевіряє:
-1. Наявність та цілісність усіх розділів регламенту v0.8.
+1. Наявність та цілісність усіх розділів регламенту v0.8 / v0.9.
 2. Багаторівневу архітектуру: Рівень 1 (Ollama <=7B, 16GB RAM), Рівень 2 (Groq + OpenRouter),
    Рівень 3 (Git Knowledge), Рівень 4 (Claude Sonnet 5.5 / GPT-OSS 120B), Рівень 5 (Antigravity).
 3. Протокол Git-First Local Access для безвідмовного доступу до файлів.
@@ -21,23 +21,9 @@ import time
 
 sys.dont_write_bytecode = True
 
-def get_default_policy_path() -> str:
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    candidates = [
-        os.path.join(script_dir, "..", "..", "config", "GEMINI.template.md"),
-        os.path.join(script_dir, "..", "..", "GEMINI.md"),
-        os.path.join(os.getcwd(), "config", "GEMINI.template.md"),
-        os.path.join(os.getcwd(), "GEMINI.md"),
-        "/home/hills/Documents/GEMINI.md",
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return os.path.abspath(c)
-    return "/home/hills/Documents/GEMINI.md"
-
 def parse_args():
-    parser = argparse.ArgumentParser(description="Validator for GEMINI.md policy v0.8")
-    parser.add_argument("--policy", type=str, default=get_default_policy_path(), help="Шлях до файлу GEMINI.md")
+    parser = argparse.ArgumentParser(description="Validator for GEMINI.md policy v0.8 / v0.9")
+    parser.add_argument("--policy", type=str, default="/home/hills/Documents/GEMINI.md", help="Шлях до файлу GEMINI.md")
     parser.add_argument("--json", action="store_true", help="Вивід у форматі JSON")
     return parser.parse_args()
 
@@ -70,7 +56,7 @@ def verify_structure(content: str) -> dict:
         ("Phase 1 Status Banner", "Phase 1 Status Banner"),
         ("Git-First Discovery", "Git & Index First"),
         ("Exploration Hard Limit", "Exploration Hard Limit"),
-        ("Версія регламенту v0.8", "Architecture (v0.8"),
+        ("Версія регламенту v0.8/v0.9", "Architecture (v0."),
         ("Централізований хаб Antigravity_Mgr", "Antigravity_Mgr"),
         ("Multi-Project Symlink Mesh", "Symlink Mesh"),
         ("Сесійний реєстр провененсу", "сесійному реєстрі провененсу"),

@@ -1,12 +1,18 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Antigravity General Execution Policy Manifest v0.8.3",
-  "version": "0.8.3",
+  "title": "Antigravity General Execution Policy Manifest v0.9.0",
+  "version": "0.9.0",
   "branch": "v0.8",
-  "updated_at": "2026-10-11T11:00:00+03:00",
+  "updated_at": "2026-10-14T21:05:00+03:00",
   "policy_document": "/home/hills/Documents/GEMINI.md",
+  "policy_reference_document": "/home/hills/Documents/docs/knowledge/index/policy_v0.9_reference.md",
+  "core_kernel_byte_limit": 20480,
+  "core_kernel_current_bytes": 17276,
+  "system_prompt_truncation_bytes": 0,
   "validator_script": "/home/hills/Documents/.agents/scripts/validate_general_policy.py",
   "antigravity_mgr": "/home/hills/Documents/Antigravity_Mgr",
+  "target_project_path": "/home/hills/Documents/Hybrid-IDE-for-contributors",
+  "target_github_repository": "https://github.com/sshill/Hybrid-IDE-for-contributirs.git",
   "stable_runners": [
     "/home/hills/Documents/.agents/scripts/diagnostic_runner.py",
     "/home/hills/Documents/Antigravity_Mgr/tools/phase1_inspect.py",
@@ -126,7 +132,7 @@
   },
   "bridge_slash_command": {
     "syntax": "/bridge [version]",
-    "default_behavior": "Dynamic auto-detection of latest active settings and branch policy (v0.8)",
+    "default_behavior": "Dynamic auto-detection of latest active settings and branch policy (v0.9)",
     "explicit_version_behavior": "Loads target policy manifest from docs/knowledge/index/policy_<version>_manifest.json",
     "formula_components": 3
   },

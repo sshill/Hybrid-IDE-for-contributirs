@@ -2,7 +2,7 @@
 name: reglament
 description: >-
   Audits the current session for strict compliance with Antigravity General
-  Execution Policy (v0.8.3+), runs pre-flight healthchecks on AI tiers
+  Execution Policy (v0.9.0+), runs pre-flight healthchecks on AI tiers
   (Tier 1 Ollama + Tier 2 Groq Cloud), validates Antigravity_Mgr tools,
   enforces the Zero Inline-Eval Gate and Git & Index First protocol, and locks
   the chat against ad-hoc DIY anti-patterns. Triggered by /reglament or /reglamet.
@@ -44,7 +44,7 @@ description: >-
 Вивести в чат публічний статус:
 - **Зафіксований домен:** `Системна інфраструктура / Регламентний аудит`
 - **Індикатор контексту:** `🟢 Оптимальний`
-- **Режим пісочниці:** `Bypass Sandbox: true (Host-First Execution Protocol v0.8.3)`
+- **Режим пісочниці:** `Bypass Sandbox: true (Host-First Execution Protocol v0.9.0)`
 - **Статус Batch Access:** `Авторизовано регламентом`
 - **Цільове завдання:** Повний аудит готовності чату, моделей ШІ та інструментів ядра.
 
