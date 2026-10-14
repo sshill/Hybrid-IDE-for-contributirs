@@ -34,14 +34,14 @@ When this skill is triggered:
    (Do NOT use `&&`, `||`, pipes `|`, or raw crawlers `view_file`/`list_dir`).
 3. **Collect Active State & Manifests:**
    - Active branch and latest commit hash.
-   - Target project path (`/home/hills/Documents/Hybrid-IDE-for-contributors`) & GitHub repository (`https://github.com/sshill/Hybrid-IDE-for-contributirs.git`).
+   - **Dynamic Session Lineage Resolution:** Перевірити наявність `Antigravity_Mgr/artifacts/session_state.json` або `Antigravity_Mgr/artifacts/walkthrough.md`. Якщо сесія закріпила конкретний цільовий проєкт (наприклад, `target_project_directory`, `target_github_repository`), динамічно передати їх у Bridge Prompt для послідовників цієї розмови.
    - Latest `walkthrough.md` location in `Antigravity_Mgr/artifacts/`.
    - Manifest corresponding to the resolved version (`policy_v0.9_manifest.json` v0.9.0).
 4. **Generate Canonical Bridge Prompt:**
    Output immediately a ready-to-copy markdown block following this strict structure:
    - **Перший рядок (Recommended Directive Title):** Чітка, однозначна назва без двозначностей та простору для галюцинацій:
      `# 🌉 Регламентний старт: Аудит зв'язку з ШІ-агентами, статус Git та засвоєння контексту v0.9.0`
-   - **1. Метадані стану та середовища:** Версія v0.9.0, Parent Conversation ID, маніфест, стан гілок, цільовий каталог (`/home/hills/Documents/Hybrid-IDE-for-contributors`) та GitHub-репозиторій (`https://github.com/sshill/Hybrid-IDE-for-contributirs.git`).
+   - **1. Метадані стану та середовища:** Версія v0.9.0, Parent Conversation ID, маніфест, стан гілок, а також динамічно підставлені параметри сесійного цільового проєкту (з `session_state.json` / `walkthrough.md`, якщо присутні).
    - **2. Імперативний поетапний протокол (Strict Step-by-Step Gate):**
      - **Крок 1 (Обов'язковий старт — ШІ-агенти та Git):**
        1. Вивести Phase 1 Status Banner.
