@@ -2,15 +2,16 @@
 name: reglament
 description: >-
   Audits the current session for strict compliance with Antigravity General
-  Execution Policy (v0.9.0+), runs pre-flight healthchecks on AI tiers
-  (Tier 1 Ollama + Tier 2 Groq Cloud), validates Antigravity_Mgr tools,
-  enforces the Zero Inline-Eval Gate and Git & Index First protocol, and locks
-  the chat against ad-hoc DIY anti-patterns. Triggered by /reglament or /reglamet.
+  Execution Policy (v0.9.0+), runs pre-flight healthchecks on all AI tiers
+  (Tier 1 Ollama + Tier 2 Groq Cloud + Tier 4 Claude Sonnet 5.5 + Tier 5 Validator),
+  validates dynamic policy manifests, enforces the Zero Inline-Eval Gate and
+  Git & Index First protocol, and locks the chat against ad-hoc DIY anti-patterns.
+  Triggered by /reglament [version] or /reglamet [version].
 ---
 
 # 🛡️ Регламентний аудит та Анти-самопальний замок (/reglament, /reglamet)
 
-Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet`, просить «перевірити регламент», «налаштувати чат на регламент» або повернути агента до дисципліни після відхилень від стандартів.
+Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet` (з опціональним аргументом версії, наприклад `/reglament v0.9` або `/reglament v0.8`), просить «перевірити регламент», «налаштувати чат на регламент» або повернути агента до дисципліни після відхилень від стандартів.
 
 ---
 
@@ -38,7 +39,7 @@ description: >-
 
 ---
 
-## 2. Покроковий протокол виконання при виклику `/reglament`
+## 2. Покроковий протокол виконання при виклику `/reglament [version]`
 
 ### 🛑 Крок 1: Обов'язковий статус-банер (Phase 1 Status Banner)
 Вивести в чат публічний статус:
@@ -46,32 +47,44 @@ description: >-
 - **Індикатор контексту:** `🟢 Оптимальний`
 - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Execution Protocol v0.9.0)`
 - **Статус Batch Access:** `Авторизовано регламентом`
-- **Цільове завдання:** Повний аудит готовності чату, моделей ШІ та інструментів ядра.
+- **Цільова версія:** динамічно визначена актуальна версія політики (за замовчуванням `v0.9.0`) або вказана в аргументі (`v0.8` тощо).
+- **Цільове завдання:** Повний аудит готовності чату, перевірка ВСІХ рівнів ШІ (Tier 1, 2, 4, 5) та валідація інструментів ядра.
 
-### 🛑 Крок 2: Бойовий аудит інференсу агентів (Tier 1 Ollama + Tier 2 Groq)
+### 🛑 Крок 2: Бойовий аудит інференсу ВСІХ агентів (Tier 1 Ollama + Tier 2 Groq + Tier 4 Claude Sonnet)
 Виконати окрему одиночну команду:
 `python3 .agents/scripts/diagnostic_runner.py --check-agents` (`BypassSandbox: true`).
+
 > [!IMPORTANT]
-> Отримані віджети `[AI Invocation Event]` для **Local Ollama** (`qwen2.5-coder:1.5b`) та **Groq Cloud LPU** (`openai/gpt-oss-120b`) агент **зобов'язаний обов'язково скопіювати у своє видиме повідомлення чату**.
+> Отримані віджети `[AI Invocation Event]` для **ВСІХ трьох провайдерів**:
+> 1. **Tier 1 (Local Edge):** Local Ollama (`qwen2.5-coder:1.5b`)
+> 2. **Tier 2 (Cloud Fallback Hub):** Groq Cloud LPU (`openai/gpt-oss-120b`)
+> 3. **Tier 4 (Pre-Implementation Arbiter):** Claude Sonnet 5.5 (`Antigravity Pool` / `/tmp/antigravity_claude_verified.flag`)
+> 
+> Агент **зобов'язаний обов'язково скопіювати у своє видиме повідомлення чату**.
 
 ### 🛑 Крок 3: Аудит хабу `Antigravity_Mgr` та валідація політики
-1. Перевірити наявність та цілісність інструментів 5 фаз через `git ls-files`:
+1. Визначити цільовий маніфест:
+   - Якщо вказано версію (наприклад, `/reglament v0.8`), перевірити `docs/knowledge/index/policy_v0.8_manifest.json`.
+   - За замовчуванням перевірити актуальний маніфест: `docs/knowledge/index/policy_v0.9_manifest.json`.
+2. Перевірити цілісність ядра `GEMINI.md`:
+   - Розмір ядра повинен бути $\le 20\text{ KB}$ (цільовий ліміт 20 480 байт, 0 байт урізання).
+3. Перевірити наявність та цілісність інструментів 5 фаз через `git ls-files`:
    `git ls-files Antigravity_Mgr/tools/`
    Повинні бути присутні:
    - `Antigravity_Mgr/tools/phase1_inspect.py`
    - `Antigravity_Mgr/tools/phase2_router.py`
    - `Antigravity_Mgr/tools/phase4_provenance.py`
    - `Antigravity_Mgr/tools/phase5_verify.py`
-2. Запустити системний валідатор політики:
+4. Запустити системний валідатор політики:
    `python3 .agents/scripts/validate_general_policy.py` (`BypassSandbox: true`).
-3. Перевірити стан робочого дерева:
+5. Перевірити стан робочого дерева:
    `git status -sb`
-   `git log -n 3 --oneline`
+   `git log -n 5 --oneline`
 
 ### 🛑 Крок 4: Фіксація стану та зведений чек-лист
 Сформувати підсумковий звіт за такою структурою:
-- **ШІ-провайдери:** Справжні віджети інференсу Tier 1 (Ollama) та Tier 2 (Groq) на екрані.
-- **Статус політики:** Результат `validate_general_policy.py` (PASS/FAIL).
+- **ШІ-провайдери:** Справжні віджети інференсу Tier 1 (Ollama), Tier 2 (Groq) та Tier 4 (Claude Sonnet 5.5) на екрані.
+- **Статус політики:** Результат `validate_general_policy.py` (PASS/FAIL) та розмір ядра `GEMINI.md`.
 - **Інструменти `Antigravity_Mgr`:** Підтвердження наявності всіх 4 інструментів фаз.
 - **Статус Git:** Поточна гілка, останній коміт, наявність незафіксованих змін.
 - **Режим роботи:** Підтвердження активності анти-самопальних замків (Zero Inline-Eval, Git & Index First, Single Command Shapes).
