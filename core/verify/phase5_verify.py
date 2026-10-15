@@ -38,7 +38,14 @@ def run_validator(validator_path, policy_path):
     if res.returncode != 0:
         sys.exit(res.returncode)
 
+import argparse
+
 def main():
+    parser = argparse.ArgumentParser(description="Phase 5 Deterministic Verification Runner")
+    parser.add_argument("--remote-ci", action="store_true", help="Також перевірити віддалений GitHub Actions CI")
+    parser.add_argument("--commit", type=str, default=None, help="Commit SHA для віддаленого CI")
+    args, _ = parser.parse_known_args()
+
     try:
         # Determine repository root (two levels up from this file)
         REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -60,6 +67,16 @@ def main():
 
         # 2. Run the general policy validator with deterministic policy path
         run_validator(VALIDATOR_PATH, policy_path)
+
+        # 3. Optional remote CI verification
+        if args.remote_ci:
+            remote_verifier = os.path.join(CORE_DIR, 'verify', 'verify_remote_ci.py')
+            cmd = [sys.executable, remote_verifier]
+            if args.commit:
+                cmd.extend(["--commit", args.commit])
+            res = subprocess.run(cmd)
+            if res.returncode != 0:
+                sys.exit(res.returncode)
 
         # If we reach this point, everything passed
         sys.stdout.write("Phase 5 verification succeeded.\n")

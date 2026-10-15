@@ -31,9 +31,10 @@
 - **Аварійний вимикач (Circuit Breaker):** 2 послідовні збої $\to$ негайний Hard Stop і запит допомоги.
 - Публікація статусу кожного зміненого об'єкта в чаті.
 
-### Фаза 5: Перевірка функціоналу та підсумковий звіт (Functional Verification & Provider Report)
+### Фаза 5: Перевірка функціоналу та підсумковий звіт (Functional Verification & Remote CI Report)
 - Тестування працездатності коду. Фінальний звіт `walkthrough.md` із чек-листом.
 - **Обов'язковий звіт провайдерів ШІ (AI Providers Execution & Status Report):** Включення відповідей і статусів усіх залучених моделей (Ollama, Groq, OpenRouter, Claude, GPT, Antigravity).
+- **Обов'язкова хмарна перевірка CI (Remote CI Verification Gate):** Заборонено декларативне завершення («Опубліковано успішно» після лише `git push`). Обов'язкова перевірка репорту виконання workflow `policy_ci.yml` через GitHub Actions API із презентацією оригінального повідомлення (Original Provider Report: Run ID, Status, Conclusion, Jobs/Steps) від раннера перед фінальним закриттям задачі.
 
 ---
 
