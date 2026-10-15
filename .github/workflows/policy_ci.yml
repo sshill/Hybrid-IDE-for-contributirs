@@ -9,6 +9,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,10 +19,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Verify Python AST and Syntax (core/ py_compile)
+      - name: Run Deterministic Phase 5 Verification (AST & Policy)
         run: |
-          python3 -m py_compile core/**/*.py
-
-      - name: Run 34-Point General Execution Policy Validator
-        run: |
-          python3 core/verify/validate_general_policy.py --policy config/GEMINI.template.md
+          python3 core/verify/phase5_verify.py

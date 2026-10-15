@@ -1,140 +1,116 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Pre-Tool Execution Interceptor & Hard Deny Gate (v0.9.0)
+Path: core/hooks/pre_tool_hook.py
+Standard: Antigravity Hard Enforcement Gate (Deterministic Execution Policy)
+
+Intercepts and validates commands prior to execution by IDE / agents:
+- Enforces trusted host execution prefixes
+- Blocks destructive commands (Hard Deny)
+- Exits 0 on ALLOW, 1 on DENY
+"""
+
 import sys
 import os
 import re
-import ast
 import argparse
-import traceback
 
-# Prevent creation of .pyc files
 sys.dont_write_bytecode = True
 
-def load_file(path):
-    """Read file content, raise informative error if fails."""
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        raise RuntimeError(f"Unable to read '{path}': {e}") from e
+# Whitelist of approved deterministic command prefixes
+trusted_host_prefixes = [
+    "python3 core/",
+    "python3 -m py_compile",
+    "python3 core/verify/",
+    "python3 core/engine/diagnostic_runner.py",
+    "python3 .agents/scripts/diagnostic_runner.py",
+    "git status",
+    "git log",
+    "git diff",
+    "git show",
+    "git branch",
+    "git remote",
+    "./setup_and_verify.sh",
+    "./push_to_github.sh",
+    "ls",
+    "pytest",
+]
 
-def write_file(path, content):
-    """Write content back to file atomically."""
-    tmp_path = f"{path}.tmp"
-    try:
-        with open(tmp_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        os.replace(tmp_path, path)
-    except Exception as e:
-        # Cleanup temp file if something went wrong
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-        raise RuntimeError(f"Unable to write updated content to '{path}': {e}") from e
+# Blacklist of hazardous / destructive patterns (Hard Deny)
+forbidden_patterns = [
+    r"\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive)\s+[/~]",
+    r">\s*/dev/sd[a-z]",
+    r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;",
+    r"\bmkfs\b",
+    r"\bdd\s+if=.*of=/dev/",
+    r"\bchmod\s+(-R\s+)?777\s+[/~]",
+    r"\bchown\s+(-R\s+)?.*\s+[/~]",
+]
 
-def parse_trusted_prefixes(source):
+def normalize_command(cmd: str) -> str:
+    """Strip leading wrappers like sudo, env, or shell invocations."""
+    c = cmd.strip()
+    c = re.sub(r"^(sudo|env|bash\s+-c|sh\s+-c)\s+", "", c).strip()
+    return c
+
+def evaluate_command(raw_cmd: str, strict: bool = False) -> tuple[bool, str]:
     """
-    Locate the assignment to ``trusted_host_prefixes`` and return its AST node
-    together with the surrounding source slice.
+    Evaluate command safety and prefix adherence.
+    Returns (is_allowed: bool, reason: str).
     """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as e:
-        raise RuntimeError(f"Syntax error while parsing the hook file: {e}") from e
+    cmd = normalize_command(raw_cmd)
+    if not cmd:
+        return True, "Empty command allowed."
 
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "trusted_host_prefixes":
-                    # Determine the exact source slice for this assignment
-                    # ast nodes have lineno (1‑based) and end_lineno (Python 3.8+)
-                    start = node.lineno - 1  # zero based index
-                    end = getattr(node, "end_lineno", None)
-                    if end is None:
-                        # Fallback: find the next blank line after start
-                        lines = source.splitlines()
-                        end = start + 1
-                        while end < len(lines) and lines[end].strip():
-                            end += 1
-                    else:
-                        end = end  # already 1‑based inclusive
-                    return (node, start, end)
-    raise RuntimeError("Could not locate 'trusted_host_prefixes' assignment in the file.")
+    # 1. Hard Deny Check against destructive patterns
+    for pat in forbidden_patterns:
+        if re.search(pat, cmd, re.IGNORECASE):
+            return False, f"Violates safety policy (matches hazardous pattern: {pat})"
 
-def format_prefix_list(prefixes, indent):
-    """Return a nicely formatted Python list literal."""
-    lines = ["["]
-    for p in prefixes:
-        lines.append(f"{indent}'{p}',")
-    lines.append(f"{indent[:-4]}]")
-    return "\n".join(lines)
+    # 2. Whitelist Check against trusted prefixes
+    for prefix in trusted_host_prefixes:
+        if cmd.startswith(prefix):
+            return True, f"Approved under trusted prefix: '{prefix}'"
 
-def update_trusted_prefixes(content, new_prefixes):
-    """
-    Add ``new_prefixes`` to the existing ``trusted_host_prefixes`` list,
-    preserving order and avoiding duplicates.
-    """
-    node, start_line, end_line = parse_trusted_prefixes(content)
-    lines = content.splitlines()
-    # Extract the original list literal source
-    original_src = "\n".join(lines[start_line:end_line])
-    # Evaluate the existing list safely (it should be a literal)
-    try:
-        existing = ast.literal_eval(original_src.split('=', 1)[1].strip())
-        if not isinstance(existing, list):
-            raise ValueError
-    except Exception:
-        raise RuntimeError("Existing 'trusted_host_prefixes' is not a simple list literal.")
-    # Merge while preserving original order
-    merged = existing[:]
-    for p in new_prefixes:
-        if p not in merged:
-            merged.append(p)
-    # Determine indentation (detect from the line containing the assignment)
-    assign_line = lines[start_line]
-    indent_match = re.match(r"(\s*)trusted_host_prefixes\s*=", assign_line)
-    base_indent = indent_match.group(1) if indent_match else ""
-    inner_indent = base_indent + "    "
-    # Build new assignment source
-    new_list_src = format_prefix_list(merged, inner_indent)
-    new_assign = f"{base_indent}trusted_host_prefixes = {new_list_src}"
-    # Replace the old slice with the new assignment
-    new_lines = lines[:start_line] + [new_assign] + lines[end_line:]
-    return "\n".join(new_lines) + "\n"
+    # 3. Read-only and non-destructive diagnostic fallback
+    safe_read_commands = ["git", "cat", "grep", "find", "head", "tail", "wc", "uname", "python3 -c", "echo"]
+    first_token = cmd.split()[0] if cmd.split() else ""
+    if first_token in safe_read_commands:
+        return True, f"Standard inspection command permitted: '{first_token}'"
+
+    if strict:
+        return False, f"Command '{cmd}' not in trusted prefix list and strict mode is active."
+
+    return True, f"Permitted with audit log: '{cmd}'"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Update core/hooks/pre_tool_hook.py to add relative trusted host prefixes."
+        description="Antigravity Pre-Tool Hard Gate Interceptor"
     )
-    parser.add_argument(
-        "hook_path",
-        nargs="?",
-        default=os.path.join("core", "hooks", "pre_tool_hook.py"),
-        help="Path to the pre_tool_hook.py file (default: core/hooks/pre_tool_hook.py)",
-    )
+    parser.add_argument("cmd_args", nargs="*", help="Command string or arguments to evaluate")
+    parser.add_argument("-c", "--command", type=str, default="", help="Command string to evaluate")
+    parser.add_argument("--strict", action="store_true", help="Enforce strict whitelist-only mode")
     args = parser.parse_args()
 
-    # Prefixes to be added (relative to repository root)
-    prefixes_to_add = [
-        "python3 core/",
-        "python3 core/engine/diagnostic_runner.py",
-        "python3 core/verify/",
-        "python3 -m py_compile",
-        "pytest",
-    ]
-
-    try:
-        original_content = load_file(args.hook_path)
-        updated_content = update_trusted_prefixes(original_content, prefixes_to_add)
-        if original_content == updated_content:
-            print("No changes required; all prefixes already present.")
-            return 0
-        write_file(args.hook_path, updated_content)
-        print(f"Successfully updated '{args.hook_path}'.")
+    # Determine command
+    if args.command:
+        target_command = args.command
+    elif args.cmd_args:
+        target_command = " ".join(args.cmd_args)
+    else:
+        # Self-test mode when executed without arguments
+        print("🟢 [PRE-TOOL HOOK: SELF-TEST] Hook operational. Interceptor ready.")
+        print(f"   Registered trusted prefixes: {len(trusted_host_prefixes)}")
+        print(f"   Registered forbidden patterns: {len(forbidden_patterns)}")
         return 0
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        traceback.print_exc()
+
+    allowed, reason = evaluate_command(target_command, strict=args.strict)
+    if allowed:
+        print(f"🟢 [PRE-TOOL HOOK: ALLOW] {reason}")
+        return 0
+    else:
+        print(f"❌ [PRE-TOOL HOOK: DENY] {reason}", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":

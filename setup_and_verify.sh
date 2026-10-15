@@ -42,8 +42,16 @@ done
 PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 echo -e "  Версія Python: ${GREEN}${PY_VER}${NC} (потрібно >= 3.10)"
 
-# 3. Перевірка локального демона Ollama
-echo -e "\n${BLUE}[3/6] Перевірка локального сервісу Ollama (Tier 1)...${NC}"
+# 3. Перевірка локального демона Ollama та апаратних меж RAM
+echo -e "\n${BLUE}[3/6] Перевірка локального сервісу Ollama (Tier 1) та апаратних меж RAM...${NC}"
+if [ -f /proc/meminfo ]; then
+    MEM_AVAIL_KB=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    MEM_AVAIL_MB=$((MEM_AVAIL_KB / 1024))
+    echo -e "  Доступна оперативна пам'ять: ${GREEN}${MEM_AVAIL_MB} МБ${NC}"
+    if [ "$MEM_AVAIL_MB" -lt 1500 ]; then
+        echo -e "  ${YELLOW}⚠️ Низький рівень RAM (< 1.5 ГБ). Для уникнення SWAP використовуйте qwen2.5-coder:1.5b або Tier 2 Groq!${NC}"
+    fi
+fi
 if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
     echo -e "  🟢 Сервіс Ollama активний на порту 11434"
     if curl -s http://127.0.0.1:11434/api/tags | grep -q "qwen2.5-coder"; then
