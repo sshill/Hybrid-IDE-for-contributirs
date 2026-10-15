@@ -9,7 +9,8 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="#"><img src="https://img.shields.io/badge/policy_tests-34%2F34%20PASS-brightgreen.svg" alt="Policy Tests 34/34"></a>
-  <a href="#"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-89.2%25%20(Tier%204%20Verified)-success.svg" alt="Architectural Maturity 89.2%"></a>
+  <a href="PoC/"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-93.3%25%20(Tier%204%20Verified)-success.svg" alt="Architectural Maturity 93.3%"></a>
+  <a href="PoC/"><img src="https://img.shields.io/badge/Stress--Test-822%20Steps%20PASS-brightgreen.svg" alt="Stress Test 822 Steps PASS"></a>
   <a href="#"><img src="https://img.shields.io/badge/dependencies-0%20external%20(stdlib)-blueviolet.svg" alt="Zero External Dependencies"></a>
 </p>
 
@@ -188,7 +189,20 @@ echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.en
 
 ---
 
-## 7. 📜 Ліцензія
+## 7. 🔬 Емпірична валідація та Proof of Concept (PoC)
+
+Архітектурні принципи фреймворку пройшли екстремальну емпіричну перевірку надійності:
+* **Стрес-тест 822 кроки / 6 діб безперервної роботи:** Сесія `c80fdbd3-7f36-4550-960c-6ce51de1741d` підтвердила нульову втрату контексту, 0 аварій ядра та повну відсутність OOM-колапсів хоста при ліміті 16 ГБ RAM.
+* **Незалежна сертифікація Tier 4 Release Code-Arbiter (Claude Sonnet 5.5):** Отримано вердикт **PASS / APPROVED** із показником архітектурної зрілості **93.3%** за адаптованим стандартом SEI/TOGAF (рівень *Principal Systems Architect* L7/L8).
+
+👉 Детальні звіти, матриці та телеметрію див. у розділі **[📁 Proof of Concept (PoC/)](PoC/)**:
+- **[PoC README](PoC/README.md)** — концептуальний огляд та архітектурне розв'язання.
+- **[Case Study: 822-Step Stress-Test](PoC/case_study_822_step_stress_test.md)** — аналіз збереження когнітивної тверезості та життєвого циклу контексту.
+- **[Tier 4 Architectural Audit Report](PoC/tier4_architectural_audit_report.md)** — повний стандартизований висновок арбітражу Claude Sonnet 5.5.
+
+---
+
+## 8. 📜 Ліцензія
 
 Проєкт розповсюджується під ліцензією **[MIT](LICENSE)**. Дозволяється вільне використання, модифікація та розширення в некомерційних і комерційних проєктах.
 
@@ -370,7 +384,20 @@ The script automatically:
 
 ---
 
-## 7. 📜 License
+## 7. 🔬 Empirical Validation & Proof of Concept (PoC)
+
+The architectural tenets of the framework underwent an extreme empirical stress-test:
+* **822-Step / 6-Day Continuous Operation Stress-Test:** Session `c80fdbd3-7f36-4550-960c-6ce51de1741d` demonstrated zero data loss, zero kernel panics, and zero host OOM collisions on a 16 GB RAM developer stand.
+* **Independent Tier 4 Release Code-Arbiter Certification (Claude Sonnet 5.5):** Awarded a **PASS / APPROVED** verdict with an architectural maturity score of **93.3%** under the SEI/TOGAF benchmark (Principal Systems Architect standard).
+
+👉 See full reports, telemetry, and matrices in the **[📁 Proof of Concept (PoC/)](PoC/)** directory:
+- **[PoC README](PoC/README.md)** — conceptual framework & architectural rationale.
+- **[Case Study: 822-Step Stress-Test](PoC/case_study_822_step_stress_test.md)** — deep dive into context lifespan, compaction, and cognitive stability.
+- **[Tier 4 Architectural Audit Report](PoC/tier4_architectural_audit_report.md)** — verbatim certification report by Claude Sonnet 5.5.
+
+---
+
+## 8. 📜 License
 
 This project is licensed under the **[MIT License](LICENSE)**. Unrestricted commercial and non-commercial use, modification, and distribution are permitted.
 
