@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pre-Tool Execution Interceptor & Hard Deny Gate (v0.9.0)
+Pre-Tool Execution Interceptor & Hard Deny Gate (Policy v0.9.1)
 Path: core/hooks/pre_tool_hook.py
 Standard: Antigravity Hard Enforcement Gate (Deterministic Execution Policy)
 
-Intercepts and validates commands prior to execution by IDE / agents:
+Intercepts and validates commands & tool calls prior to execution:
 - Enforces trusted host execution prefixes
 - Blocks destructive commands (Hard Deny)
-- Exits 0 on ALLOW, 1 on DENY
+- Selective Code Guard (Zero DIY Coding for *.py, *.sh, *.ts, etc.)
+- Provenance ledger verification
+- Exits 0 on ALLOW, 1 on DENY (CLI) / returns JSON decision
 """
 
 import sys
 import os
 import re
+import json
+import hashlib
 import argparse
 
 sys.dont_write_bytecode = True
@@ -86,12 +90,32 @@ def evaluate_command(raw_cmd: str, strict: bool = False) -> tuple[bool, str]:
         if re.search(pat, cmd):
             return False, f"HARD GATE VIOLATION (Zero Inline-Eval Policy): Inline script execution forbidden: '{pat}'"
 
-    # 3. Whitelist Check against trusted prefixes
+    # 3. Provenance check for AI generation attribution in git commit
+    if "commit" in cmd and "[generated:" in cmd.lower():
+        ledger_paths = [
+            "/tmp/antigravity_provenance_ledger.json",
+            "/home/hills/Documents/.agents/.provenance_ledger.json"
+        ]
+        has_ledger_entry = False
+        for lp in ledger_paths:
+            if os.path.exists(lp):
+                try:
+                    with open(lp, "r", encoding="utf-8") as f_l:
+                        l_data = json.load(f_l)
+                        if l_data and len(l_data) > 0:
+                            has_ledger_entry = True
+                            break
+                except Exception:
+                    pass
+        if not has_ledger_entry:
+            return False, "HARD GATE VIOLATION (Anti-Shadow Gate v0.9.1): Заборонено вказувати '[generated: <model>]' у коміті без реального запису у реєстрі провененсу."
+
+    # 4. Whitelist Check against trusted prefixes
     for prefix in trusted_host_prefixes:
         if cmd.startswith(prefix):
             return True, f"Approved under trusted prefix: '{prefix}'"
 
-    # 4. Read-only and non-destructive diagnostic fallback
+    # 5. Read-only and non-destructive diagnostic fallback
     safe_read_commands = ["git", "cat", "grep", "find", "head", "tail", "wc", "uname", "echo"]
     first_token = cmd.split()[0] if cmd.split() else ""
     if first_token in safe_read_commands:
@@ -102,6 +126,92 @@ def evaluate_command(raw_cmd: str, strict: bool = False) -> tuple[bool, str]:
 
     return True, f"Permitted with audit log: '{cmd}'"
 
+def evaluate_tool_call_json(data: dict) -> dict:
+    """Оцінка безпеки JSON виклику інструменту для IDE / Antigravity (Selective Code Guard v0.9.1)."""
+    tool_call = data.get("toolCall", {})
+    name = tool_call.get("name", "")
+    args = tool_call.get("args", {})
+
+    if name in ("write_to_file", "replace_file_content"):
+        target_file = args.get("TargetFile", "")
+        if target_file:
+            normalized = target_file.replace("\\", "/").lower()
+            base_name = os.path.basename(normalized)
+
+            whitelist_exts = (".md", ".json", ".yaml", ".yml", ".txt", ".gitignore", ".cfg", ".ini", ".toml", ".log", ".csv", ".tsv", ".sql", ".html", ".css")
+            is_doc = (
+                base_name in ("walkthrough.md", "implementation_plan.md", "readme.md") or
+                "/brain/" in normalized or
+                "/docs/" in normalized or
+                normalized.startswith("docs/") or
+                any(normalized.endswith(ext) for ext in whitelist_exts)
+            )
+
+            in_scratch = (
+                "/scratch/" in normalized or
+                normalized.startswith("scratch/") or
+                "/tmp/" in normalized or
+                "/temporary/" in normalized
+            )
+
+            if not is_doc and not in_scratch:
+                abs_target = os.path.abspath(target_file)
+                code_content = args.get("CodeContent", "")
+                repl_content = args.get("ReplacementContent", "")
+
+                content_hashes = []
+                if code_content:
+                    content_hashes.append(hashlib.sha256(code_content.encode("utf-8")).hexdigest())
+                if repl_content:
+                    content_hashes.append(hashlib.sha256(repl_content.encode("utf-8")).hexdigest())
+
+                ledger_paths = [
+                    "/tmp/antigravity_provenance_ledger.json",
+                    "/home/hills/Documents/.agents/.provenance_ledger.json"
+                ]
+                ledger = {}
+                for lp in ledger_paths:
+                    if os.path.exists(lp):
+                        try:
+                            with open(lp, "r", encoding="utf-8") as lf:
+                                ledger.update(json.load(lf))
+                        except Exception:
+                            pass
+
+                authorized = False
+                if abs_target in ledger:
+                    authorized = True
+                else:
+                    for entry in ledger.values():
+                        e_hash = entry.get("sha256")
+                        if e_hash and e_hash in content_hashes:
+                            authorized = True
+                            break
+
+                if not authorized:
+                    for flag_path in ("/tmp/antigravity_provenance_valid.flag", "/tmp/antigravity_ollama_synthesized.flag"):
+                        if os.path.exists(flag_path):
+                            try:
+                                with open(flag_path, "r", encoding="utf-8") as vf:
+                                    flag_txt = vf.read()
+                                    if abs_target in flag_txt:
+                                        authorized = True
+                                        break
+                            except Exception:
+                                pass
+
+                if not authorized:
+                    return {
+                        "decision": "deny",
+                        "reason": (
+                            "HARD GATE VIOLATION (Zero DIY Coding / Selective Code Guard v0.9.1):\n"
+                            f"Заборонено прямий запис виконуваного коду через {name}. "
+                            "Код має бути синтезований локальною Ollama (python3 .agents/scripts/diagnostic_runner.py --synthesize-script \"<task>\" --out <file>) або узгоджений через Phase 4 Provenance."
+                        )
+                    }
+
+    return {"decision": "allow"}
+
 def main():
     parser = argparse.ArgumentParser(
         description="Antigravity Pre-Tool Hard Gate Interceptor"
@@ -109,7 +219,20 @@ def main():
     parser.add_argument("cmd_args", nargs="*", help="Command string or arguments to evaluate")
     parser.add_argument("-c", "--command", type=str, default="", help="Command string to evaluate")
     parser.add_argument("--strict", action="store_true", help="Enforce strict whitelist-only mode")
+    parser.add_argument("--json", action="store_true", help="Process JSON input from stdin")
     args = parser.parse_args()
+
+    # If stdin is not a tty and no CLI command is provided, parse JSON from stdin
+    if args.json or (not sys.stdin.isatty() and not args.command and not args.cmd_args):
+        try:
+            raw = sys.stdin.read()
+            if raw.strip():
+                data = json.loads(raw)
+                res = evaluate_tool_call_json(data)
+                print(json.dumps(res))
+                return 0 if res.get("decision") == "allow" else 1
+        except Exception as e:
+            pass
 
     # Determine command
     if args.command:

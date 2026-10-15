@@ -224,9 +224,11 @@ def check_hardware_for_model(model_name: str) -> bool:
 
     return True
 
-def query_ollama_engine(prompt: str, model: str = "qwen2.5-coder:1.5b", num_predict: int = 400) -> str:
-    """Нативний прямий інференс до локальної Ollama з часовою фіксацією та адаптивним таймаутом."""
+def query_ollama_engine(prompt: str, model: str = "qwen2.5-coder:1.5b", num_predict: int = 400, return_meta: bool = False):
+    """Нативний прямий інференс до локальної Ollama з часовою фіксацією, валідацією полів та адаптивним таймаутом."""
     if not check_hardware_for_model(model):
+        if return_meta:
+            return "HARDWARE_LIMIT_EXCEEDED", {}
         return "HARDWARE_LIMIT_EXCEEDED"
 
     url = "http://127.0.0.1:11434/api/generate"
@@ -258,17 +260,32 @@ def query_ollama_engine(prompt: str, model: str = "qwen2.5-coder:1.5b", num_pred
             data = json.loads(resp.read().decode("utf-8"))
             elapsed = round(time.time() - start_time, 2)
             response_text = data.get("response", "").strip()
-            
+            eval_count = data.get("eval_count", 0)
+            prompt_eval_duration = data.get("prompt_eval_duration", 0)
+            total_duration = data.get("total_duration", 0)
+
+            meta = {
+                "eval_count": eval_count,
+                "prompt_eval_duration_ms": round(prompt_eval_duration / 1e6, 2) if prompt_eval_duration else 0.0,
+                "total_duration_ms": round(total_duration / 1e6, 2) if total_duration else 0.0,
+                "model": data.get("model", model),
+                "created_at": data.get("created_at", "")
+            }
+
             # Вивід стандартизованого віджета інференсу у консоль
             print(f"\n> [!NOTE]")
             print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
             print(f"> - **Провайдер / Модель:** Local Ollama / {model}")
-            print(f"> - **Час інференсу:** {elapsed} с")
+            print(f"> - **Час інференсу:** {elapsed} с (Eval: {eval_count} tok, Prompt eval: {meta['prompt_eval_duration_ms']} мс)")
             print(f"> - **Отриманий вердикт / результат:** SUCCESS\n")
-            
+
+            if return_meta:
+                return response_text, meta
             return response_text
     except Exception as e:
         print(f"❌ Помилка запиту до Ollama: {e}", file=sys.stderr)
+        if return_meta:
+            return f"ERROR: {e}", {}
         return f"ERROR: {e}"
 
 def query_groq_engine(prompt: str, model: str = "openai/gpt-oss-120b", max_tokens: int = 2500) -> str:
@@ -428,12 +445,19 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
 
     # 1. Спроба первинного синтезу через локальну Ollama (num_predict збільшено до 1200 токенів)
     print(f"🔹 [1/2] Спроба первинного локального синтезу через Ollama ({model})...")
-    raw_code = query_ollama_engine(full_prompt, model=model, num_predict=1200)
-    
+    raw_code, ollama_meta = query_ollama_engine(full_prompt, model=model, num_predict=1200, return_meta=True)
+
     ollama_failed = False
+    eval_count = ollama_meta.get("eval_count", 0) if isinstance(ollama_meta, dict) else 0
+    prompt_eval_duration_ms = ollama_meta.get("prompt_eval_duration_ms", 0.0) if isinstance(ollama_meta, dict) else 0.0
+
+    # Перевірка обов'язкових полів відповіді (Policy v0.9.1: ліквідація симуляцій та декоративності)
     if not raw_code or raw_code.startswith("ERROR:") or raw_code in ("OLLAMA_OFFLINE", "HARDWARE_LIMIT_EXCEEDED"):
         ollama_failed = True
         print(f"⚠️ Локальна модель повернула помилку або недоступна: {raw_code}", file=sys.stderr)
+    elif eval_count <= 0 or prompt_eval_duration_ms <= 0:
+        ollama_failed = True
+        print(f"⚠️ Невалідна відповідь Ollama: відсутні або нульові обов'язкові поля eval_count ({eval_count}) чи prompt_eval_duration ({prompt_eval_duration_ms} мс).", file=sys.stderr)
     else:
         # Очищення можливих markdown-блоків ```python ... ```
         cb = raw_code.strip()
@@ -507,10 +531,27 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
             f.write(clean_code + "\n")
         print(f"✅ Скрипт успішно згенеровано ({active_model}, Tier {active_tier}) та збережено: {abs_out}")
 
-        # Реєстрація в реєстрі провененсу (Anti-Shadow Gate)
+        # Реєстрація в реєстрі провененсу (Anti-Shadow Gate v0.9.1)
         prov_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py"
+        if not os.path.exists(prov_tool):
+            prov_tool = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "provenance", "phase4_provenance.py"))
         if os.path.exists(prov_tool):
-            subprocess.run([sys.executable, prov_tool, "--register", abs_out, "--model", active_model])
+            cmd = [
+                sys.executable, prov_tool,
+                "--register", abs_out,
+                "--model", active_model,
+                "--prompt", task_prompt[:250]
+            ]
+            if active_tier == 1 and eval_count > 0:
+                cmd.extend(["--eval-count", str(eval_count), "--duration-ms", str(prompt_eval_duration_ms)])
+            subprocess.run(cmd)
+
+        # Створення сесійного прапорця валідації
+        try:
+            with open("/tmp/antigravity_ollama_synthesized.flag", "w", encoding="utf-8") as f_flag:
+                f_flag.write(f"SYNTHESIZED: {abs_out} model={active_model} tier={active_tier} eval_count={eval_count} timestamp={time.time()}\n")
+        except Exception:
+            pass
 
         print(f"👉 Для виконання запустіть:\n   python3 {os.path.abspath(__file__)} --run {abs_out}")
         return 0

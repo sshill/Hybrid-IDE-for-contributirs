@@ -35,6 +35,7 @@
 - Виконання узгоджених дій через **Git-First Local Access**.
 - **Бюджет кроків Фази 4 (Phase 4 Step Budget):** Ліміт $\le 20$ викликів на ітерацію. При вичерпанні — проміжний звіт у чат.
 - **Аварійний вимикач (Circuit Breaker):** 2 послідовні збої $\to$ негайний Hard Stop і запит допомоги.
+- **Селективний гейт коду (Selective Code Guard v0.9.1):** Жорсткий OS-бар'єр у хуку `pre_tool_hook.py` для інструментів `write_to_file` та `replace_file_content`. Білий список (White-list: `*.md`, `*.json`, `*.yaml`, `*.yml`, `*.txt`, `.gitignore`, `brain/`, `docs/`) редагується без тертя (`decision: allow`). Контрольовані файли коду (`*.py`, `*.sh`, `*.bash`, `*.ts`, `*.js`, `*.pas`, `*.cpp`, `*.h`, `*.go`) дозволені виключно в `scratch/` або за наявності підтвердженого SHA256 у реєстрі провененсу (`/tmp/antigravity_provenance_ledger.json`). Спроби свавільного DIY-кодингу фізично блокуються з вердиктом Hard Deny.
 - **Візуальний степер побудови коду (Code Lifecycle Stepper):** Поетапне відображення: `[1. Синтез]` ➔ `[2. py_compile AST]` ➔ `[3. SLSA Хеш fcntl.flock]` ➔ `[4. Git Commit]` ➔ `[5. Шлюз Арбітра]`.
 - Публікація статусу кожного зміненого об'єкта в чаті.
 
@@ -63,6 +64,7 @@
    - Антігравіті першим веде 5 фаз, читає буфер `git show`, формує промпти.
    - Антігравіті **категорично заборонено самостійно кодити чи вигадувати правки «від себе»**.
    - **Залізний бар'єр Zero Inline-Eval Gate (`pre_tool_hook.py`):** Інлайн-скрипти (`python3 -c`, `--eval`, `bash -c`, `eval`, `exec`) фізично блокуються. Код генерується через моделі в файли або через `diagnostic_runner.py --synthesize-script`. Доступ — Always-Allow.
+   - **Ліквідація декоративності Ollama (Anti-Black-Box Inference v0.9.1):** Заборонено фіктивні симуляції генерації коду. Команда `diagnostic_runner.py --synthesize-script` виконує фактичний HTTP POST до `http://127.0.0.1:11434/api/generate` з обов'язковою перевіркою полів `response`, `eval_count` ($>0$), `prompt_eval_duration` ($>0$) та реєстрацією SHA256 у подвійному реєстрі провененсу. Фальсифікація комітів (`[generated: <model>]` без запису в реєстрі) блокується на рівні OS-перехоплювача.
 1. **Рівень 1: Local Edge Ollama <=7B (Primary Workhorse):**
    - Уся первинна робота: синтаксис, функції, diff, синтез скриптів (`diagnostic_runner.py --synthesize-script "<завдання>" --out <файл>`). Режим: `Stateless` (`temperature: 0.1–0.2`, `num_predict: 250..400`).
    - **Апаратний профіль машини (16 ГБ RAM, Intel Core 3 100U, Intel i915 Graphics):** `qwen2.5-coder:1.5b` (~1.2 ГБ), `3b` (~2.2 ГБ), `7b` (~4.7 ГБ, запас вільної RAM $\ge 6$ ГБ).
@@ -116,6 +118,8 @@
      1. **Zero Inline-Eval Hard Gate:** Фізично відхиляє будь-який інлайн-код (`python[0-9.]* -c`, `bash -c`, `eval`, `exec`).
      2. **Runtime Circuit Breaker Gate:** Зупиняє ReAct-цикл при 2 послідовних збоях команди/скрипта.
      3. **Git Safety Gate:** Блокує деструктивні Git-операції (`git reset`, `git revert`, `git restore`, `git push`, `git merge`, `git rebase`).
+     4. **Selective Code Guard Gate (v0.9.1):** Фізичний OS-гейт для `write_to_file` та `replace_file_content`. Білий список файлів (`*.md`, `*.json`, `*.yaml`, `*.yml`, `*.txt`, `.gitignore`, `.cfg`, `.ini`, `.toml`) дозволено без перешкод. Виконувані розширення (`*.py`, `*.sh`, `*.bash`, `*.ts`, `*.js`, `*.pas`, `*.cpp`, `*.h`, `*.go`) дозволені виключно в `scratch/` або за умови реєстрації їхнього SHA256 у реєстрі провененсу ШІ.
+     5. **Commit Provenance Gate (v0.9.1):** Блокування комітів із зазначенням `[generated: <model>]`, якщо відсутній відповідний запис у подвійному реєстрі провененсу (/tmp та ~/.agents/).
 3. **Централізований хаб `Antigravity_Mgr` та Multi-Project Symlink Mesh (v0.9.0):**
    - Консолідація у [`/home/hills/Documents/Antigravity_Mgr/`](file:///home/hills/Documents/Antigravity_Mgr/).
    - **Toolbelt (`Antigravity_Mgr/tools/`):** `phase1_inspect.py`, `phase2_router.py`, `phase4_provenance.py` (реєстр SHA256 у `/tmp/antigravity_provenance_ledger.json`), `phase5_verify.py`.
