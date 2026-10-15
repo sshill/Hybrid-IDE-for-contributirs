@@ -11,6 +11,7 @@
   <a href="#"><img src="https://img.shields.io/badge/policy_tests-34%2F34%20PASS-brightgreen.svg" alt="Policy Tests 34/34"></a>
   <a href="PoC/"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-93.3%25%20(Tier%204%20Verified)-success.svg" alt="Architectural Maturity 93.3%"></a>
   <a href="PoC/"><img src="https://img.shields.io/badge/Stress--Test-822%20Steps%20PASS-brightgreen.svg" alt="Stress Test 822 Steps PASS"></a>
+  <a href="PoC/"><img src="https://img.shields.io/badge/Longevity%20Record-1225%20Steps%20PASS-brightgreen.svg" alt="Longevity Record 1225 Steps PASS"></a>
   <a href="#"><img src="https://img.shields.io/badge/dependencies-0%20external%20(stdlib)-blueviolet.svg" alt="Zero External Dependencies"></a>
 </p>
 
@@ -118,11 +119,21 @@ flowchart TD
 
 | Фаза | Інженерний челендж (Risk / Anti-Pattern) | Реалізоване системне рішення (Best Practice) |
 | :--- | :--- | :--- |
-| **Фаза 1: Діагностика** | **Сліпий перебір дисків та спалювання токенів:** Модель рекурсивно сканує директорії, вичерпує контекст і формує галюцинації про проєкт. | **«Git & Index First»:** Дослідження починається виключно з `git status`, `git log` та готових JSON-маніфестів у `config/`. Публічний **Phase 1 Status Banner** фіксує контекст і унеможливлює приховані ланцюги викликів. |
+| **Фаза 1: Діагностика** | **Сліпий перебір дисків та спалювання токенів:** Модель рекурсивно сканує директорії через `ls`/`dir` (що повертають порожній вивід із ізольованого сандбоксу) або `find`/`grep`, вичерпує контекст і формує галюцинації про проєкт. | **«Git & Index First» + Check 0 Hard Deny Gate:** У `core/hooks/pre_tool_hook.py` команди `ls` та `dir` заблоковані на рівні ОС (exit code 1) з автоматичною вказівкою використовувати `git ls-files` або `git status`. Дослідження починається виключно з `git status`, `git log` та готових JSON-маніфестів у `config/`. Публічний **Phase 1 Status Banner** фіксує контекст і унеможливлює приховані ланцюги викликів. |
 | **Фаза 2: Репорт і План** | **Непрозорість дій та вичерпання квот:** Агент змінює код без попередження, а запити зависають або впираються в Rate Limits хмари. | **RouteLLM SLA Dispatcher (30с) + LiteLLM Safe Budget:** Автоматичний розрахунок часу виконання (ETC). Вивід $\le 60$ токенів скеровується на локальну Ollama, $> 60$ токенів — на швидкий Groq LPU із буфером $-20\%$ (6400 TPM, 800 RPM). `implementation_plan.md` формується до першого байту змін. |
 | **Фаза 3: Підтвердження** | **Втрата накопиченого стану або випадковий пуш:** Ризик деструктивних відкатів (`git reset`), конфліктних злиттів чи передчасного надсилання коду на GitHub. | **Dual Git Policy:** Повна автономія для локальних комітів вперед (прогрес фіксується безперервно), але фізичне блокування `git reset`, `git revert`, `git merge`, `git push` без явної згоди розробника («+»). |
 | **Фаза 4: Застосування** | **1. Неконтрольований інлайн-код та спам (Inline-Eval Hell):** Анонімний запуск `python -c` чи `bash -c`, накопичення синтаксичних аварій і невідтворюваних мутацій коду.<br>**2. Дрейф уваги та галюцинації в глибокому контексті:** При тривалій роботі (>100-800 кроків) модель втрачає системні контракти та спотворює суміжні модулі.<br>**3. Апаратний ценз 16 ГБ RAM:** Ризик OOM-падіння хоста чи зависання у SWAP при паралельній роботі IDE, браузера та локальних LLM.<br>**4. Брак аудиту походження коду:** Зміни вносяться наосліп, без реєстрації SHA256-хешів і фіксації в Git. | **1. Zero Inline-Eval Gate (`pre_tool_hook.py`):** Залізний бар'єр на рівні ОС (exit code 126) блокує інлайн-код; скрипти синтезуються виключно у файли.<br>**2. FrugalGPT Cascade (Ollama $\to$ Groq 120B):** Рутинний код пише безкоштовна локальна Ollama 1.5B; при синтаксичних збоях чи таймауті спрацьовує безшовний перехід на Groq Cloud LPU.<br>**3. Апаратне профілювання RAM:** Заборона моделей $\ge 14\text{B}$ локально, ліміт контексту $\le 3000$ токенів.<br>**4. SLSA Session Provenance Ledger (`phase4_provenance.py`):** Атомарний лок `fcntl.flock`, реєстрація SHA256-хешів синтезованих файлів та фіксація коміту в локальному Git перед перевіркою. |
 | **Фаза 5: Перевірка** | **1. Залежність від шляхів хоста («Works on my machine»):** Захардкоджений абсолютний шлях до файлу політики на машині розробника викликає падіння в ізольованому хмарному раннері CI.<br>**2. «Декларативний успіх пушу» (Assumed Remote Success):** Сліпе повідомлення «Опубліковано успішно» після `git push` без контролю виконання хмарного білду, що маскує фонові збої пайплайну. | **1. Динамічний детерміністичний резолвінг шляхів:** Функція `get_default_policy()` знаходить `config/GEMINI.template.md` або `GEMINI.md` відносно кореня Git, гарантуючи 100% паритет між локальним середовищем та хмарою.<br>**2. Remote CI Verification Gate + Презентація оригінального меседжа:** Автономний модуль `verify_remote_ci.py` опитує GitHub Actions API за точним `HEAD` SHA, очікує завершення `policy_ci.yml`, транслює оригінальний звіт провайдера в чат і блокує фініш без `conclusion: success`. |
+
+### 🏛️ Чотири архітектурні директиви (Architectural Directives)
+
+На основі емпіричного аналізу чотирьох довготривалих сесій (c80fdbd3, ee6e8ead, 80b38d99 та 2617f09c) зафіксовано 4 системні директиви:
+1. **Екстерналізація пам'яті у файлову систему під Git-контролем (Tier 3 Knowledge Base):** Замість накопичення масивів логів і коду в робочому діалоговому буфері (що призводить до неминучого дрейфу уваги при компакції), усі артефакти негайно зберігаються у файлах `docs/knowledge/` та коммітяться в Git.
+2. **Жорсткі технічні перехоплювачі (Hard Deny Gates в `pre_tool_hook.py`):** Промпти не захищають від збоїв моделей. Впроваджено фізичні перехоплювачі на рівні ОС:
+   - **Check 0:** Блокування команд `ls` та `dir` (запобігання порожнім сандбокс-відповідям та сліпим циклам обходу).
+   - **Check 1:** Zero Inline-Eval Gate — повна заборона `python3 -c`, `bash -c` та одноразових термінальних скриптів в обхід файлової системи.
+3. **Git-First Local Access (`git show HEAD:<шлях>`) та детерміністичний 34-пунктний валідатор політики:** Повний відхід від одноразових термінальних скриптів на користь детерміністичних системних інструментів і читання першоджерел через Git.
+4. **Апаратне профілювання заліза (16 ГБ RAM, ліміти моделі <=7B) та RouteLLM/FrugalGPT прогнозування ваги токенів:** Замість ручного запуску кастомних скриптів сесії запит завжди оцінюється математично ($N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$) і скеровується на локальну Ollama ($\le 60$ токенів виводу) або Groq LPU ($> 60$ токенів) у межах SLA Quantum $\le 30.0$ с.
 
 ### 📌 Емпіричні інженерні кейси Фази 4 (Імплементація на цільовий об'єкт та контекст):
 
@@ -133,6 +144,10 @@ flowchart TD
 #### 🔹 Кейс 2: Атомарна імплементація на цільовий об'єкт з фіксацією лога в Git (Zero Inline-Eval & SLSA Ledger)
 * **Челендж:** Спроба LLM вносити модифікації через неконтрольований термінальний інлайн-код (`python3 -c "import ...; open(...) ..."`) призводить до пошкодження вихідних файлів, обходу синтаксичних перевірок та неможливості верифікації походження коду.
 * **Рішення:** Впроваджено жорсткий перехоплювач [`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py), який фізично відхиляє інлайн-виклики з кодом помилки `126`. Будь-яка модифікація цільового об'єкта відбувається за суворим циклом: (1) чистий синтез файлу локальною моделлю; (2) обов'язкова компіляція AST (`py_compile`) перед накатом; (3) реєстрація SHA256 у реєстрі SLSA/in-toto через [`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py) з атомарним блокуванням `fcntl.flock`; (4) атомарна фіксація в коміті локального Git із записом у журнал перед передачею на перевірку Фази 5.
+
+#### 🔹 Кейс 3: Рекорд довгожительства на 1225 кроків та 12.82 доби (Сесія ee6e8ead — Стійкість проти 236 циклів компакції)
+* **Челендж:** Сесія `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` тривала 307.7 годин (12.82 доби безперервної роботи, 1225 кроків взаємодії, 15.26 МБ JSONL-транскрипту). Платформний рушій провів 236 циклів компакції контексту. Без зовнішнього каркаса агент втрачає системні контракти вже після 3-5 циклів компакції.
+* **Рішення:** Завдяки дотриманню 4 архітектурних директив, екстерналізації проміжних висновків у Markdown-файли та детерміністичним перехоплювачам: 0 деструктивних відкатів Git (`git reset`), 0 апаратних OOM хоста (16 ГБ RAM вистачило на весь період), 100% збереження цілісності архітектури. Детальний емпіричний аналіз див. у [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
 
 ### 📌 Емпіричні інженерні кейси Фази 5 (Хмарна верифікація та CI/CD):
 
@@ -150,14 +165,14 @@ flowchart TD
 
 Всі модулі написані на базі стандартної бібліотеки Python 3.10+ (без сторонніх `pip` залежностей):
 
-* **[`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)** — Уніфікована точка входу: перевірка моделей, безпечне підвантаження ключів з `~/.env`, FrugalGPT-каскад, апаратний ценз RAM ($\ge 6$ GB для 7B, заборона $\ge 14$B на локалі).
-* **[`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)** & **[`pre_tool_hook.sh`](core/hooks/pre_tool_hook.sh)** — OS-перехоплювач команд: блокує інлайн-код, деструктивні команди та контролює Step Budget.
+* **[`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)** — Уніфікована точка входу: перевірка моделей, безпечне підвантаження ключів з `~/.env`, FrugalGPT-каскад зі строгим префіксом `startswith("ERROR:")` (ліквідує хибні перемикання на коді з логуванням помилок), апаратний ценз RAM ($\ge 6$ GB для 7B, заборона $\ge 14$B на локалі).
+* **[`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)** & **[`pre_tool_hook.sh`](core/hooks/pre_tool_hook.sh)** — OS-перехоплювач команд: Check 0 Hard Deny Gate для `ls` та `dir` (примусовий Git-First), Check 1 Zero Inline-Eval Gate (блокування `python -c` та `bash -c`), блокування деструктивних команд Git та контроль Step Budget.
 * **[`core/router/phase2_router.py`](core/router/phase2_router.py)** — Динамічний диспетчер пропускної здатності RouteLLM (SLA 30 с) та контроль Safe Budget LiteLLM (-20%).
 * **[`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py)** — Сесійний криптографічний реєстр походження коду рівня SLSA/in-toto з блокуванням `fcntl.flock`.
 * **[`core/inspect/phase1_inspect.py`](core/inspect/phase1_inspect.py)** — Zero-dependency інспектор AST, JSON, XML та DOCX структур без сліпого обходу дисків.
 * **[`core/verify/phase5_verify.py`](core/verify/phase5_verify.py)** — Портативний компілятор синтаксису Python та інтегратор фінального чек-листа.
 * **[`core/verify/verify_remote_ci.py`](core/verify/verify_remote_ci.py)** — Автономний перевіряльник віддаленого GitHub Actions CI/CD: опитування API, очікування завершення білду та вивід оригінального повідомлення провайдера (Original Provider Report).
-* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-точковий структурний валідатор відповідності регламенту v0.8.3.
+* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-точковий структурний валідатор відповідності регламенту v0.9.0.
 
 ---
 
@@ -214,11 +229,13 @@ echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.en
 
 Архітектурні принципи фреймворку пройшли екстремальну емпіричну перевірку надійності:
 * **Стрес-тест 822 кроки / 6 діб безперервної роботи:** Сесія `c80fdbd3-7f36-4550-960c-6ce51de1741d` підтвердила нульову втрату контексту, 0 аварій ядра та повну відсутність OOM-колапсів хоста при ліміті 16 ГБ RAM.
+* **Рекорд довгожительства 1225 кроків / 12.82 доби безперервної роботи:** Сесія `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` витримала 236 циклів компакції контексту, зберігши 100% працездатність без втрати пам'яті та без аварій ОС.
 * **Незалежна сертифікація Tier 4 Release Code-Arbiter (Claude Sonnet 5.5):** Отримано вердикт **PASS / APPROVED** із показником архітектурної зрілості **93.3%** за адаптованим стандартом SEI/TOGAF (рівень *Principal Systems Architect* L7/L8).
 
 👉 Детальні звіти, матриці та телеметрію див. у розділі **[📁 Proof of Concept (PoC/)](PoC/)**:
 - **[PoC README](PoC/README.md)** — концептуальний огляд та архітектурне розв'язання.
 - **[Case Study: 822-Step Stress-Test](PoC/case_study_822_step_stress_test.md)** — аналіз збереження когнітивної тверезості та життєвого циклу контексту.
+- **[Case Study: 1225-Step Longevity Record](PoC/case_study_session_ee6e8ead_longevity.md)** — емпіричний аналіз стійкості проти 236 циклів компакції та порівняльна матриця 4 сесій.
 - **[Tier 4 Architectural Audit Report](PoC/tier4_architectural_audit_report.md)** — повний стандартизований висновок арбітражу Claude Sonnet 5.5.
 
 ---
@@ -334,11 +351,21 @@ flowchart TD
 
 | Phase | Engineering Challenge (Risk / Anti-Pattern) | Implemented System Solution (Best Practice) |
 | :--- | :--- | :--- |
-| **Phase 1: Diagnosis** | **Blind disk traversal & token exhaustion:** LLM recursively walks directories, depleting context window and producing repository hallucinations. | **«Git & Index First»:** Investigation strictly starts with `git status`, `git log`, and JSON index manifests in `config/`. Public **Phase 1 Status Banner** anchors context and prohibits silent loops. |
+| **Phase 1: Diagnosis** | **Blind disk traversal & token exhaustion:** LLM recursively walks directories via `ls`/`dir` (which returns empty output from the isolated sandbox) or `find`/`grep`, depleting context window and producing repository hallucinations. | **«Git & Index First» + Check 0 Hard Deny Gate:** In `core/hooks/pre_tool_hook.py`, commands `ls` and `dir` are hard-blocked at the OS level (exit code 1) with an automated instruction to use `git ls-files` or `git status`. Investigation strictly starts with `git status`, `git log`, and JSON index manifests in `config/`. Public **Phase 1 Status Banner** anchors context and prohibits silent loops. |
 | **Phase 2: Proposed Plan** | **Opaque agent actions & quota exhaustion:** Agent mutates files unexpectedly; cloud requests time out or hit rate limits. | **RouteLLM SLA Dispatcher (30s) + LiteLLM Safe Budget:** Calculates Estimated Time to Completion (ETC). Outputs $\le 60$ tokens route to local Ollama; outputs $> 60$ tokens route to Groq LPU with a $-20\%$ safety buffer (6400 TPM, 800 RPM). `implementation_plan.md` created before editing a single byte. |
 | **Phase 3: Approval Gate** | **Data loss or accidental remote push:** Destructive rollbacks (`git reset`), merge conflicts, or unauthorized pushes to GitHub. | **Dual Git Policy:** Full autonomy for local forward commits (preserves momentum), but physical blocking of `git reset`, `git revert`, `git merge`, and `git push` without explicit user sanction («+»). |
 | **Phase 4: Execution** | **1. Unchecked Inline Scripts & Runaway Loops (Inline-Eval Hell):** Anonymous `python -c` or `bash -c` executions, syntax regressions, and untracked code modifications.<br>**2. Attention Drift & Hallucinations in Deep Context:** In prolonged sessions (>100-800 steps), LLMs degrade, hallucinate APIs, and silently destroy adjacent code modules.<br>**3. Host 16 GB RAM Constraints:** Risk of host OOM crashing or severe SWAP thrashing under concurrent browser, IDE, and local LLM workloads.<br>**4. Lack of Code Provenance & Git Tracking:** Code applied blindly without cryptographic hashing or formal commit logs. | **1. Zero Inline-Eval Gate (`pre_tool_hook.py`):** OS-level barrier (exit code 126) strictly blocks inline code execution; all scripts must be synthesized to disk.<br>**2. FrugalGPT Cascade (Ollama $\to$ Groq 120B):** Local free Ollama (1.5B) handles routine code synthesis; syntax errors or timeouts seamlessly failover to Groq Cloud LPU.<br>**3. Hardware RAM Bounds:** Hard prohibition of local models $\ge 14\text{B}$, context bounded to $\le 3000$ tokens.<br>**4. SLSA Session Provenance Ledger (`phase4_provenance.py`):** Atomic file locking (`fcntl.flock`), SHA256 script registration, and mandatory Git commit fixation prior to Phase 5 handover. |
 | **Phase 5: Verification** | **1. Host Path Coupling ("Works on My Machine"):** Hardcoded absolute paths to developer host files cause catastrophic breakage on isolated containerized cloud CI runners.<br>**2. Declarative Push & Assumed Success:** Blindly declaring "Published successfully" upon `git push` while the remote GitHub Actions runner fails silently in the background. | **1. Dynamic Deterministic Path Resolution:** `get_default_policy()` resolves `config/GEMINI.template.md` or `GEMINI.md` relative to Git workspace root, guaranteeing 100% environment parity between laptop and cloud.<br>**2. Remote CI Verification Gate + Original Provider Report:** Standalone stdlib tool `verify_remote_ci.py` polls GitHub Actions API for target `HEAD` commit SHA, awaits completion, prints the verbatim Original Provider Report (jobs, steps, timings), and strictly blocks on `conclusion: success`. |
+
+### 🏛️ Four Architectural Directives
+
+Based on empirical analysis across four long-lived operational sessions (c80fdbd3, ee6e8ead, 80b38d99, and 2617f09c), four mandatory architectural directives are codified:
+1. **Memory Externalization into Git-Versioned Filesystem (Tier 3 Knowledge Base):** Rather than allowing conversational memory buffers to balloon with bulky code blocks and logs (which triggers catastrophic attention loss upon sliding-window compaction), all intermediate state is externalized to `docs/knowledge/` and tracked in Git.
+2. **Hard Deny Technical Gates in `pre_tool_hook.py`:** Soft conversational prompts fail under stress. Hard OS-level interceptors enforce discipline:
+   - **Check 0:** Hard Deny Gate for `ls` and `dir` (eliminates empty sandbox directory queries and blind crawling loops).
+   - **Check 1:** Zero Inline-Eval Gate — physical prohibition of `python3 -c`, `bash -c`, and untracked ad-hoc scripts.
+3. **Git-First Local Access (`git show HEAD:<path>`) & Deterministic 34-Point Policy Validator:** Complete elimination of temporary single-use shell scripts in favor of deterministic system tools and reading ground truths directly via Git.
+4. **Hardware-Aware Resource Profiling (16 GB RAM, $\le 7$B Local Model Ceiling) & RouteLLM/FrugalGPT Token Weight Forecasting:** Session-scoped tasks are forecasted using $N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$ and routed to local Ollama ($\le 60$ output tokens) or Groq LPU ($> 60$ tokens) within an SLA Quantum $\le 30.0$ s, eliminating token waste.
 
 ### 📌 Empirical Engineering Cases — Phase 4 (Target Implementation & Context Stress-Test):
 
@@ -349,6 +376,10 @@ flowchart TD
 #### 🔹 Case 2: Atomic Target Implementation with Git Provenance Fixation (Zero Inline-Eval & SLSA Ledger)
 * **Challenge:** Agents attempting ad-hoc modifications via terminal inline one-liners (`python3 -c "..."` or shell pipes) frequently corrupt target source code, bypass syntax checks, and produce unverified, untraceable file mutations.
 * **Solution:** Deployed an OS-level pre-tool interceptor ([`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)) that strictly denies inline evaluations with exit code `126`. All implementations on target objects strictly execute through a hardened lifecycle: (1) clean script/file synthesis via local Ollama; (2) pre-implementation AST compilation (`py_compile`); (3) SHA256 hashing and SLSA/in-toto ledger logging via [`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py) using atomic `fcntl.flock` locks; (4) deterministic local Git commit logging before initiating Phase 5 verification.
+
+#### 🔹 Case 3: 1225-Step / 12.82-Day Longevity Record (Session ee6e8ead — Resilience Across 236 Compactions)
+* **Challenge:** Operational session `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` ran continuously for 307.7 hours (12.82 days, 1225 interaction steps, 15.26 MB JSONL transcript). The platform engine executed 236 compaction cycles. Without deterministic scaffolding, LLM agents lose architectural integrity after 3-5 compaction cycles.
+* **Solution:** Strictly adhering to the 4 architectural directives, externalizing findings to Markdown files, and enforcing deterministic pre-tool gates yielded: 0 destructive Git rollbacks (`git reset`), 0 host OOM collisions (16 GB RAM developer stand remained responsive throughout), and 100% architectural contract preservation. See complete empirical findings in [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
 
 ### 📌 Empirical Engineering Cases — Phase 5 (Cloud CI Verification):
 
@@ -366,14 +397,14 @@ flowchart TD
 
 All modules are written in standard Python 3.10+ stdlib with zero external `pip` dependencies:
 
-* **[`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)** — Unified execution runner: provider check, FrugalGPT cascade, RAM bounds enforcement ($\ge 6$ GB for 7B, local prohibition of $\ge 14$B), credential loader.
-* **[`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)** & **[`pre_tool_hook.sh`](core/hooks/pre_tool_hook.sh)** — OS pre-tool hook interceptor: blocks inline code execution, prevents destructive Git commands, enforces Step Budget.
+* **[`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)** — Unified execution runner: provider check, FrugalGPT cascade with strict prefix check `startswith("ERROR:")` (eliminating false-positive failover cascades on code containing error logs), RAM bounds enforcement ($\ge 6$ GB for 7B, local prohibition of $\ge 14$B), credential loader.
+* **[`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)** & **[`pre_tool_hook.sh`](core/hooks/pre_tool_hook.sh)** — OS pre-tool hook interceptor: Check 0 Hard Deny Gate for `ls` and `dir` (enforces Git-First), Check 1 Zero Inline-Eval Gate (blocks `python -c` and `bash -c`), prevents destructive Git commands, enforces Step Budget.
 * **[`core/router/phase2_router.py`](core/router/phase2_router.py)** — Dynamic RouteLLM throughput dispatcher (30s SLA) and LiteLLM Safe Budget guard (-20%).
 * **[`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py)** — SLSA/in-toto compliant session provenance ledger with atomic file locking (`fcntl.flock`).
 * **[`core/inspect/phase1_inspect.py`](core/inspect/phase1_inspect.py)** — Zero-dependency structural inspector for AST, JSON, XML, and DOCX files.
 * **[`core/verify/phase5_verify.py`](core/verify/phase5_verify.py)** — Portable Python syntax compiler and verification checklist runner.
 * **[`core/verify/verify_remote_ci.py`](core/verify/verify_remote_ci.py)** — Standalone GitHub Actions CI/CD verifier: polls API, awaits build completion, and prints the Original Provider Report without third-party dependencies.
-* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-point structural policy validator ensuring adherence to v0.8.3.
+* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-point structural policy validator ensuring adherence to v0.9.0.
 
 ---
 
@@ -430,11 +461,13 @@ The script automatically:
 
 The architectural tenets of the framework underwent an extreme empirical stress-test:
 * **822-Step / 6-Day Continuous Operation Stress-Test:** Session `c80fdbd3-7f36-4550-960c-6ce51de1741d` demonstrated zero data loss, zero kernel panics, and zero host OOM collisions on a 16 GB RAM developer stand.
+* **1225-Step / 12.82-Day Longevity Record:** Session `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` withstood 236 context compaction cycles, maintaining 100% operational fidelity without memory loss or OS crashes.
 * **Independent Tier 4 Release Code-Arbiter Certification (Claude Sonnet 5.5):** Awarded a **PASS / APPROVED** verdict with an architectural maturity score of **93.3%** under the SEI/TOGAF benchmark (Principal Systems Architect standard).
 
 👉 See full reports, telemetry, and matrices in the **[📁 Proof of Concept (PoC/)](PoC/)** directory:
 - **[PoC README](PoC/README.md)** — conceptual framework & architectural rationale.
 - **[Case Study: 822-Step Stress-Test](PoC/case_study_822_step_stress_test.md)** — deep dive into context lifespan, compaction, and cognitive stability.
+- **[Case Study: 1225-Step Longevity Record](PoC/case_study_session_ee6e8ead_longevity.md)** — empirical analysis of resilience across 236 compaction cycles and comparative matrix of 4 sessions.
 - **[Tier 4 Architectural Audit Report](PoC/tier4_architectural_audit_report.md)** — verbatim certification report by Claude Sonnet 5.5.
 
 ---

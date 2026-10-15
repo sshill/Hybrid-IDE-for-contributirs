@@ -1,4 +1,4 @@
-# 🏛️ Hybrid Agentic IDE: Системна Архітектура та 5-Фазний Пайплайн (v0.8.3)
+# 🏛️ Hybrid Agentic IDE: Системна Архітектура та 5-Фазний Пайплайн (v0.9.0)
 
 Цей документ фіксує повну системну архітектуру, математичні моделі та інженерні рішення середовища **Hybrid-IDE-for-contributors**, створеного для залучення розробників до проєкту [fallaut4-STDFUA](https://github.com/sshill/fallaut4-STDFUA) із мінімальними операційними витратами (**Zero Marginal Token Cost**).
 
@@ -26,13 +26,13 @@
 1. **Валідатор 1: Antigravity Primary Orchestrator & Policy Validator (Tier 0 & Tier 5)**
    - Здійснює оцінку завдання та структурування 5-фазного пайплайну.
    - Первинна фільтрація виводу провайдерів (Ollama / Groq).
-   - Автоматизована перевірка 34 структурних правил регламенту через `validate_general_policy.py` (0.0 с).
+   - Автоматизована перевірка 34 структурних правил регламенту через `validate_general_policy.py` (0.000 с).
    - Формування звіту змін `implementation_plan.md` до внесення першого байту в репозиторій.
 
 2. **Валідатор 2: Claude Sonnet Pre-Implementation Code-Arbiter (Tier 4)**
    - Офіційний релізний Code-Арбітраж (`[CODE_AUDIT_REPORT]`).
    - Залучається суворо перед початком імплементації та релізом онлайн.
-   - Перевіряє відсутність архітектурних розривів (радар компетенцій SEI/TOGAF $\ge 80\%$) та відповідність нормам відкритого коду GitHub.
+   - Перевіряє відсутність архітектурних розривів (радар компетенцій SEI/TOGAF $\ge 80\%$, поточний бал: **93.3%**) та відповідність нормам відкритого коду GitHub.
 
 ---
 
@@ -48,9 +48,10 @@
 ### Деталізація інженерних бар'єрів:
 
 #### 🟢 Фаза 1: Діагностика (Diagnosis & Research)
-* **Челендж:** Сліпий лінійний перебір файлів дисків (`find_by_name`, `list_dir`, `grep_search`), що спалює ліміти токенів і веде до галюцинацій щодо стану проєкту.
+* **Челендж:** Сліпий лінійний перебір файлів дисків (`find_by_name`, `list_dir`, `grep_search`) та спроби виклику `ls -la` у пісочниці, що повертають порожній результат через ізоляцію простору імен і спалюють ліміти токенів.
 * **Рішення:** 
   - Імператив **«Git & Index First»**: аналіз починається суворо з `git status`, `git log` та читання готових JSON-маніфестів у `docs/knowledge/index/`.
+  - **Hard Deny Gate на `ls` / `dir` у [`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)**: OS-рівневий перехоплювач фізично блокує `ls` / `dir` з кодом повернення 1, направляючи агента на атомарні буфери Git (`git status -sb`, `git ls-files`, `git show HEAD:<файл>`).
   - Обов'язковий публічний **Phase 1 Status Banner** фіксує контекст і унеможливлює приховані ланцюги викликів.
   - На цій фазі заборонено змінювати робочі файли.
 
@@ -58,11 +59,15 @@
 * **Челендж:** Непрозорість дій агента, зависання моделей та вичерпання лімітів запитів (Rate Limits).
 * **Рішення:**
   - Обов'язкове формування артефакту `implementation_plan.md` із пре-флайт перевіркою моделей.
-  - **RouteLLM Throughput Dispatcher:** Розрахунок очікуваного часу завершення (ETC):
-    $$\text{ETC} = \text{TTFT} + \frac{\text{Estimated Output Tokens}}{\text{Model Throughput}}$$
-    * Вивід $\le 60$ токенів: локальна Ollama 7B ($\text{ETC} \le 22\text{ с} \le 30.0\text{ с}$ квант SLA).
-    * Вивід $> 60$ токенів: Groq Cloud LPU ($\text{ETC} \le 2.0\text{ с}$).
-  - **LiteLLM Safe Budgeting Guard (-20% margin):** Обмеження безкоштовного API Groq до безпечного порогу **6400 TPM** (замість 8000), **800 RPM** та макс. **3200 токенів** на вивід.
+  - **Математичний прогноз ваги токенів:**
+    $$\text{Prompt Tokens} = \text{int}(\text{len}(\text{task\_prompt.split}()) \times 1.3) + 150$$
+  - **RouteLLM Throughput Dispatcher:** Розрахунок очікуваного часу завершення ($\text{ETC}$):
+    $$\text{ETC} = \text{TTFT} + \frac{N_{\text{out}}}{V_{\text{model}}}$$
+    * Вивід $\le 60$ токенів: локальна Ollama 7B ($\text{ETC} \le 23.2\text{ с} \le 30.0\text{ с}$ квант SLA).
+    * Вивід $\le 250$ токенів: локальна Ollama 1.5B ($\text{ETC} \le 12.8\text{ с} \le 30.0\text{ с}$).
+    * Вивід $> 250$ токенів або $N_{\text{prompt}} > 3000$: Groq Cloud LPU ($\text{ETC} \le 1.0 - 2.0\text{ с}$).
+  - **LiteLLM Safe Budgeting Guard (-20% margin):** Обмеження безкоштовного API Groq до безпечного порогу **6400 TPM** (замість 8000), **800 RPM** та макс. **3200 токенів** на одиничний вивід.
+  - **Адаптивний таймаут сокета:** $\text{Timeout} = \max(30, \text{int}(1.5 \times \text{ETC}) + 10)$ замість жорстких 90 с.
 
 #### 🟢 Фаза 3: Підтвердження та Автономія Git (Approval Gate)
 * **Челендж:** Випадкова втрата даних через деструктивні відкати (`git reset`, `git revert`), конфлікти злиття або несанкціонований віддалений пуш (`git push origin`).
@@ -74,26 +79,39 @@
 #### 🟢 Фаза 4: Застосування (Execution & Status Report)
 * **Челендж:** Неконтрольоване виконання інлайн-скриптів (`python -c`, `bash -c`), синтаксичні дефекти та нескінченні цикли помилок (Runaway Agent).
 * **Рішення:**
-  - **Zero Inline-Eval Gate (`pre_tool_hook.py`):** OS-перехоплювач блокує спроби виконання інлайн-коду з кодом 126.
-  - **FrugalGPT Failover Cascade:** Автоматичне AST-тестування коду, згенерованого локальною Ollama; при `SyntaxError` або обриві сокета виконується безшовний failover на Groq 120B.
-  - **SLSA Session Provenance Ledger (`phase4_provenance.py`):** Реєстрація SHA256 хешів усіх згенерованих файлів; блокування запуску невідстежуваних скриптів.
+  - **Zero Inline-Eval Gate ([`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)):** OS-перехоплювач блокує спроби виконання інлайн-коду з кодом 126.
+  - **Zero-Friction Always Allow Protocol:** Довірені простори (`/home/hills/Documents`, `antigravity/brain`) та канонічні префікси команд виключають шторм модальних запитів `needs_prompt = True`.
+  - **FrugalGPT Failover Cascade ([`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)):** Автоматичне AST-тестування коду, згенерованого локальною Ollama; при `SyntaxError` або обриві сокета виконується безшовний failover на Groq 120B із строгою перевіркою `raw_cloud.startswith("ERROR:")` (усунено хибні збої при генерації коду з рядком `[ERROR]`).
+  - **SLSA Session Provenance Ledger ([`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py)):** Реєстрація SHA256 хешів усіх згенерованих файлів; блокування запуску невідстежуваних скриптів.
   - **Step Budget:** Жорсткий ліміт $\le 20$ дій на ітерацію та Circuit Breaker після 2 збоїв.
 
 #### 🟢 Фаза 5: Перевірка функціоналу (Functional Verification Checklist)
 * **Челендж:** «Успіх за замовчуванням» (Assumed Correctness) без реального виконання перевірок або приховані помилки провайдерів.
 * **Рішення:**
-  - Автоматичний прогін 34 структурних перевірок через `validate_general_policy.py` (34/34 PASS).
+  - Автоматичний прогін 34 структурних перевірок через `validate_general_policy.py` (34/34 PASS за 0.000 с).
+  - Комплексний синтаксичний аудит скриптів через `phase5_verify.py` (12/12 PASS).
   - Генерація підсумкового артефакту `walkthrough.md` із детальним чек-листом.
   - **Multi-Provider Report:** Обов'язкова публікація реальних віджетів інференсу всіх залучених моделей (Ollama, Groq, Claude, Antigravity) на екран чату.
 
 ---
 
-## 4. 🧩 Специфікація модулів ядра (`core/`)
+## 4. 🧩 Специфікація модулів ядра (`core/` — Zero Dependencies)
 
-1. **`core/engine/diagnostic_runner.py`** — Уніфікована точка входу: перевірка агентів, FrugalGPT-каскад, апаратний ценз RAM ($\ge 6$ GB для 7B, блокування $\ge 14$B на локалі), безпечний парсер `~/.env`.
-2. **`core/hooks/pre_tool_hook.py` & `.sh`** — OS-рівневий перехоплювач викликів інструментів, блокувальник небезпечних операцій та інлайн-евалу.
-3. **`core/router/phase2_router.py`** — Диспетчер пропускної здатності RouteLLM (SLA 30 с) та LiteLLM Safe Budgeting Guard.
-4. **`core/provenance/phase4_provenance.py`** — Криптографічний сесійний реєстр походження коду SLSA/in-toto з блокуванням `fcntl.flock`.
-5. **`core/inspect/phase1_inspect.py`** — Zero-dependency інспектор AST, JSON, XML та DOCX структур без сліпого обходу дисків.
-6. **`core/verify/phase5_verify.py`** — Портативний генератор перевірочних чек-листів та AST-компілятор скриптів.
-7. **`core/verify/validate_general_policy.py`** — 34-точковий валідатор структурних маркерів політики v0.8.3.
+1. **[`core/engine/diagnostic_runner.py`](core/engine/diagnostic_runner.py)** — Уніфікована точка входу: перевірка агентів, FrugalGPT-каскад, апаратний ценз RAM ($\ge 6$ GB для 7B, блокування $\ge 14$B на локалі), безпечний парсер `~/.env`, строга валідація помилок `raw_cloud.startswith("ERROR:")`.
+2. **[`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py) & [`.sh`](core/hooks/pre_tool_hook.sh)** — OS-рівневий перехоплювач викликів інструментів: Hard Deny Gate на `ls`/`dir`, блокування деструктивних команд та інлайн-евалу (код 126).
+3. **[`core/router/phase2_router.py`](core/router/phase2_router.py)** — Диспетчер пропускної здатності RouteLLM (SLA 30 с), калькулятор ваги токенів, адаптивний таймаут сокета та LiteLLM Safe Budgeting Guard (-20%).
+4. **[`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py)** — Криптографічний сесійний реєстр походження коду SLSA/in-toto з блокуванням `fcntl.flock`.
+5. **[`core/inspect/phase1_inspect.py`](core/inspect/phase1_inspect.py)** — Zero-dependency інспектор AST, JSON, XML та DOCX структур без сліпого обходу дисків.
+6. **[`core/verify/phase5_verify.py`](core/verify/phase5_verify.py)** — Портативний генератор перевірочних чек-листів та AST-компілятор скриптів.
+7. **[`core/verify/verify_remote_ci.py`](core/verify/verify_remote_ci.py)** — Автономний валідатор віддаленого GitHub Actions CI/CD (опитування API, вивід Original Provider Report).
+8. **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-точковий валідатор структурних маркерів політики v0.8.3 / v0.9.0.
+
+---
+
+## 5. 🔬 Емпіричні рекорди надійності сесій (Proof of Concept)
+
+- **Сесія `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` (Абсолютний рекорд):** **1225 кроків**, **12.82 діб безперервної роботи**, **15.26 МБ логів**, **236 compaction events**, **0 деструктивних операцій Git**. Народження репозиторію `Hybrid-IDE` (кроки 789–839).
+- **Сесія `c80fdbd3-7f36-4550-960c-6ce51de1741d` (Стрес-тест):** **822 кроки**, **5.80 діб**, 100% збереження когнітивної тверезості при компакції контексту.
+- **Офіційна сертифікація Tier 4 Claude Sonnet 5.5 Arbiter:** **PASS / APPROVED (93.3% зрілості)**.
+
+👉 Детальні звіти див. у **[`PoC/case_study_session_ee6e8ead_longevity.md`](../../PoC/case_study_session_ee6e8ead_longevity.md)** та **[`PoC/case_study_822_step_stress_test.md`](../../PoC/case_study_822_step_stress_test.md)**.

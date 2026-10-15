@@ -61,5 +61,7 @@
 
 1. **[Емпіричний кейс-стаді: 822-кроковий стрес-тест (`case_study_822_step_stress_test.md`)](./case_study_822_step_stress_test.md)**  
    Аналіз реальної сесії `c80fdbd3-7f36-4550-960c-6ce51de1741d`, яка тривала **6 діб безперервно**, згенерувала **2.38 МБ логів** і зберегла 100% цілісності доктринальних даних UWE, CSIS та коду без жодного OOM чи збою ОС.
-2. **[Офіційний звіт релізного арбітражу Tier 4 Claude Sonnet 5.5 (`tier4_architectural_audit_report.md`)](./tier4_architectural_audit_report.md)**  
+2. **[Емпіричний кейс-стаді: 1225-кроковий рекорд довгожительства (`case_study_session_ee6e8ead_longevity.md`)](./case_study_session_ee6e8ead_longevity.md)**  
+   Аналіз рекордної сесії `ee6e8ead-ba3b-4489-814f-d04ffdd435d6`: **1225 кроків, 12.82 доби роботи, 15.26 МБ журналу, 236 компакцій**, 0 деструктивних відкатів Git та 0 апаратних OOM завдяки екстерналізації контексту.
+3. **[Офіційний звіт релізного арбітражу Tier 4 Claude Sonnet 5.5 (`tier4_architectural_audit_report.md`)](./tier4_architectural_audit_report.md)**  
    Незалежна сертифікація архітектури релізним Code-Арбітром за стандартом SEI/TOGAF: вердикт **PASS / APPROVED**, оцінка зрілості **93.3%** (Principal Systems Architect Benchmark).

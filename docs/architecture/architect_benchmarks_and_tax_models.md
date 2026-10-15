@@ -36,27 +36,32 @@ content_hash_sha256: "b4d7e2a890123cf4819aaec78162817293817281"
 
 ---
 
-## 2. 🛠️ Статус розгортання гібридного IDE (v0.8.3)
+## 2. 🛠️ Статус розгортання гібридного IDE (v0.9.0)
 
-Сесія `c9ce18b5-97d0-438c-9d4b-0b418598febe` закріпила перехід від декларативних промптів до детерміністичних системних бар'єрів:
+Еволюція архітектури закріпила перехід від декларативних текстових промптів до детерміністичних системних бар'єрів:
 1. **Multi-Project Symlink Mesh:**  
    Симлінки `~/.gemini/config/skills/reglament`, `reglamet`, `bridge` та `fallaut/.agents` ліквідували ізоляцію підпроєктів і гарантують автодоповнення навичок у GUI IDE.
-2. **Zero Inline-Eval Hard Gate (`pre_tool_hook.py`):**  
-   Повна фізична заборона `python3 -c`, `bash -c`, `eval`, `exec`, Here-docs. Будь-який скрипт синтезується ШІ-моделями у файли.
-3. **Session Provenance Ledger (`phase4_provenance.py`):**  
-   Реєстрація та верифікація SHA256 хешів скриптів перед виконанням (SLSA-сумісний provenance).
-4. **RouteLLM Throughput & SLA:**  
-   SLA = 30.0 с. Моделі розподілені за пропускною здатністю шини:
+2. **Hard Deny Gate на `ls` / `dir` (`core/hooks/pre_tool_hook.py`):**  
+   Повна фізична заборона сліпого шелл-краулінгу через `ls` та `dir` у пісочниці. Вилучення `ls` з whitelist з детерміністичним перенаправленням на Git-First буфери (`git status -sb`, `git ls-files`, `git show HEAD:<файл>`).
+3. **Zero Inline-Eval Hard Gate (`pre_tool_hook.py`):**  
+   Повна фізична заборона `python3 -c`, `bash -c`, `eval`, `exec`, Here-docs (код 126). Будь-який скрипт синтезується ШІ-моделями у файли.
+4. **Zero-Friction Always Allow Protocol:**  
+   Нормалізація форм команд та розширення довірених просторів (`/home/hills/Documents`, `antigravity/brain`), що усунуло шторм модальних запитів `needs_prompt = True`.
+5. **Session Provenance Ledger (`phase4_provenance.py`):**  
+   Реєстрація та верифікація SHA256 хешів скриптів перед виконанням (SLSA-сумісний provenance з `fcntl.flock`).
+6. **RouteLLM Throughput & SLA:**  
+   SLA $\le 30.0$ с. Математичний прогноз ваги токенів ($\text{Prompt Tokens} = \text{len}(\text{prompt}) \times 1.3 + 150$). Моделі розподілені за пропускною здатністю шини:
    - `qwen2.5-coder:1.5b` (20 tok/s) — дрібний синтаксис та AST $\le 250$ токенів.
    - `openai/gpt-oss-120b` (Groq LPU, ~460 tok/s) — вивід $> 250$ токенів та оверфлоу.
-5. **LiteLLM Safe Budget:**  
+7. **LiteLLM Safe Budget:**  
    Безпечний поріг Groq (-20% margin): **6400 TPM**, **800 RPM**, макс. **3200 токенів** на одиничний вивід.
-6. **FrugalGPT Каскад:**  
-   Автоматична ескалація з Ollama на Groq 120B при `SyntaxError` чи обриві сокета з адаптивним таймаутом $\max(30, 1.5 \cdot \text{ETC} + 10)$.
-7. **Ranked Online Escalation:**  
-   4 послідовні шлюзи онлайну (Git & Index First $\to$ Absence Gate $\to$ Targeted Search $\to$ Заземлення у `docs/knowledge/*.md` з комітом $\to$ Network Freeze).
-8. **Автоматична валідація політики:**  
-   `validate_general_policy.py` фіксує **34/34 структурних розділів [PASS]** у гілці `v0.8`.
+8. **FrugalGPT Каскад з точним префіксом:**  
+   Автоматична ескалація з Ollama на Groq 120B при `SyntaxError` чи обриві сокета з адаптивним таймаутом $\max(30, 1.5 \cdot \text{ETC} + 10)$ та строгою перевіркою `raw_cloud.startswith("ERROR:")`.
+9. **Автоматична валідація політики:**  
+   `validate_general_policy.py` фіксує **34/34 структурних розділів [PASS]** (0.000 с).
+10. **Емпіричні рекорди сесій-довгожителів:**  
+   - Сесія `ee6e8ead` — **1225 кроків, 12.8 діб безперервної роботи, 15.26 МБ логів, 236 compaction events, 0 Git resets**.
+   - Сесія `c80fdbd3` — **822 кроки, 5.8 діб безперервного стрес-тесту**.
 
 ---
 
