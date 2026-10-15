@@ -5,6 +5,8 @@ import py_compile
 import traceback
 import runpy
 
+import subprocess
+
 # Prevent creation of .pyc files
 sys.dont_write_bytecode = True
 
@@ -25,16 +27,16 @@ def compile_python_files(root_path):
                 failures.append((file_path, exc))
     return failures
 
-def run_validator(validator_path):
+def run_validator(validator_path, policy_path):
     """
-    Execute the validator script located at ``validator_path``.
-    The validator is expected to raise an exception on failure.
+    Execute the validator script located at ``validator_path`` with explicit policy path.
     """
     if not os.path.isfile(validator_path):
         raise FileNotFoundError(f"Validator script not found: {validator_path}")
 
-    # Run the validator in an isolated namespace
-    runpy.run_path(validator_path, run_name="__main__")
+    res = subprocess.run([sys.executable, validator_path, "--policy", policy_path])
+    if res.returncode != 0:
+        sys.exit(res.returncode)
 
 def main():
     try:
@@ -42,6 +44,11 @@ def main():
         REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
         CORE_DIR = os.path.join(REPO_ROOT, 'core')
         VALIDATOR_PATH = os.path.join(CORE_DIR, 'verify', 'validate_general_policy.py')
+
+        # Determine policy path relative to REPO_ROOT
+        policy_path = os.path.join(REPO_ROOT, 'config', 'GEMINI.template.md')
+        if not os.path.isfile(policy_path):
+            policy_path = os.path.join(REPO_ROOT, 'GEMINI.md')
 
         # 1. Compile all Python files under core/
         compile_errors = compile_python_files(CORE_DIR)
@@ -51,8 +58,8 @@ def main():
                 sys.stderr.write(f"  {file_path}: {exc}\n")
             sys.exit(1)
 
-        # 2. Run the general policy validator
-        run_validator(VALIDATOR_PATH)
+        # 2. Run the general policy validator with deterministic policy path
+        run_validator(VALIDATOR_PATH, policy_path)
 
         # If we reach this point, everything passed
         sys.stdout.write("Phase 5 verification succeeded.\n")

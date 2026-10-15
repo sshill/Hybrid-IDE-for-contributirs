@@ -21,9 +21,38 @@ import time
 
 sys.dont_write_bytecode = True
 
+def get_default_policy() -> str:
+    """Динамічне визначення шляху до файлу політики (сумісність із локальним хостом та CI/CD)."""
+    # 1. Відносно поточної робочої директорії
+    cwd_candidates = [
+        os.path.join(os.getcwd(), "config", "GEMINI.template.md"),
+        os.path.join(os.getcwd(), "GEMINI.md"),
+    ]
+    for c in cwd_candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+
+    # 2. Відносно розташування цього файлу (core/verify/..)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    repo_candidates = [
+        os.path.join(repo_root, "config", "GEMINI.template.md"),
+        os.path.join(repo_root, "GEMINI.md"),
+    ]
+    for c in repo_candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+
+    # 3. Глобальний шлях розробника як крайній fallback
+    fallback = "/home/hills/Documents/GEMINI.md"
+    if os.path.isfile(fallback):
+        return fallback
+
+    return "config/GEMINI.template.md"
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Validator for GEMINI.md policy v0.8 / v0.9")
-    parser.add_argument("--policy", type=str, default="/home/hills/Documents/GEMINI.md", help="Шлях до файлу GEMINI.md")
+    parser.add_argument("--policy", type=str, default=get_default_policy(), help="Шлях до файлу GEMINI.md")
     parser.add_argument("--json", action="store_true", help="Вивід у форматі JSON")
     return parser.parse_args()
 
