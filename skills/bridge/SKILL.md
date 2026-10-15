@@ -36,7 +36,7 @@ When this skill is triggered:
    - Active branch and latest commit hash.
    - **Dynamic Session Lineage Resolution:** Перевірити наявність `Antigravity_Mgr/artifacts/session_state.json` або `Antigravity_Mgr/artifacts/walkthrough.md`.
      * **За замовчуванням (General Projects):** Базовим робочим каталогом для загальних проєктів (дослідження, CSIS, UWE, політика `GEMINI.md`, системний тулбелт) є кореневий простір хоста: `/home/hills/Documents` (гілка `v0.8` / `main`).
-     * **Підпроєкти (Sub-projects / Overlays):** Каталоги підпроєктів (наприклад, `/home/hills/Documents/Hybrid-IDE-for-contributors` для розробників IDE або `/home/hills/Documents/fallaut` для Fallout 4) вказуються як `Lineage Target` **суворо і виключно тоді**, коли активний домен сесії прямо присвячений роботі з цим підпроєктом.
+     * **Підпроєкти (Sub-projects / Overlays):** Нові або існуючі підпроєкти підключаються до власного Git суто із зазначенням папки в ярлику проєкту. Чати у відповідному проєкті суворо використовують саме цей каталог (наприклад, `/home/hills/Documents/Hybrid-IDE-for-contributors` або `/home/hills/Documents/fallaut`). У такому разі `/bridge` автоматично закріплює каталог цього проєкту та його власний Git як `Lineage Target` для спадкоємців сесії.
    - Latest `walkthrough.md` location in `Antigravity_Mgr/artifacts/`.
    - Manifest corresponding to the resolved version (`policy_v0.9_manifest.json` v0.9.0).
 4. **Generate Canonical Bridge Prompt:**
