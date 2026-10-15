@@ -33,7 +33,6 @@ trusted_host_prefixes = [
     "git remote",
     "./setup_and_verify.sh",
     "./push_to_github.sh",
-    "ls",
     "pytest",
 ]
 
@@ -63,18 +62,37 @@ def evaluate_command(raw_cmd: str, strict: bool = False) -> tuple[bool, str]:
     if not cmd:
         return True, "Empty command allowed."
 
+    # 0. Hard Deny: Заборона сліпого шелл-краулінгу через ls/dir (Git & Index First v0.9.0)
+    cmd_tokens = cmd.split()
+    if cmd_tokens and cmd_tokens[0] in ("ls", "dir"):
+        return False, (
+            "HARD GATE VIOLATION (Git & Index First Protocol v0.9.0): "
+            f"Команда '{cmd}' заблокована! Сліпий перегляд файлів через 'ls'/'dir' у пісочниці заборонено. "
+            "Використовуйте: 1) 'git status -sb', 2) 'git ls-files <шлях>', 3) 'git show HEAD:<файл>', 4) маніфести у docs/knowledge/index/."
+        )
+
     # 1. Hard Deny Check against destructive patterns
     for pat in forbidden_patterns:
         if re.search(pat, cmd, re.IGNORECASE):
             return False, f"Violates safety policy (matches hazardous pattern: {pat})"
 
-    # 2. Whitelist Check against trusted prefixes
+    # 2. Hard Deny Check against inline eval (Zero Inline-Eval Policy)
+    inline_eval_patterns = [
+        r"\bpython[0-9.]*\s+(-c|--eval)\b",
+        r"\b(bash|sh|zsh|dash)\s+-c\b",
+        r"\b(eval|exec)\s+[\"']",
+    ]
+    for pat in inline_eval_patterns:
+        if re.search(pat, cmd):
+            return False, f"HARD GATE VIOLATION (Zero Inline-Eval Policy): Inline script execution forbidden: '{pat}'"
+
+    # 3. Whitelist Check against trusted prefixes
     for prefix in trusted_host_prefixes:
         if cmd.startswith(prefix):
             return True, f"Approved under trusted prefix: '{prefix}'"
 
-    # 3. Read-only and non-destructive diagnostic fallback
-    safe_read_commands = ["git", "cat", "grep", "find", "head", "tail", "wc", "uname", "python3 -c", "echo"]
+    # 4. Read-only and non-destructive diagnostic fallback
+    safe_read_commands = ["git", "cat", "grep", "find", "head", "tail", "wc", "uname", "echo"]
     first_token = cmd.split()[0] if cmd.split() else ""
     if first_token in safe_read_commands:
         return True, f"Standard inspection command permitted: '{first_token}'"

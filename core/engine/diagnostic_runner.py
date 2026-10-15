@@ -431,7 +431,7 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
     raw_code = query_ollama_engine(full_prompt, model=model, num_predict=1200)
     
     ollama_failed = False
-    if not raw_code or "ERROR" in raw_code or raw_code in ("OLLAMA_OFFLINE", "HARDWARE_LIMIT_EXCEEDED"):
+    if not raw_code or raw_code.startswith("ERROR:") or raw_code in ("OLLAMA_OFFLINE", "HARDWARE_LIMIT_EXCEEDED"):
         ollama_failed = True
         print(f"⚠️ Локальна модель повернула помилку або недоступна: {raw_code}", file=sys.stderr)
     else:
@@ -468,7 +468,7 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
     if ollama_failed:
         print("🚀 Ескалація на Рівень 2 (Groq Cloud LPU openai/gpt-oss-120b) з безпечним лімітом 2500 токенів...")
         raw_cloud = query_groq_engine(full_prompt, model="openai/gpt-oss-120b", max_tokens=2500)
-        if not raw_cloud or "ERROR" in raw_cloud or "GROQ_KEY_MISSING" in raw_cloud:
+        if not raw_cloud or raw_cloud.startswith("ERROR:") or "GROQ_KEY_MISSING" in raw_cloud:
             print(f"❌ Критична помилка каскаду: Groq Cloud також не зміг згенерувати скрипт: {raw_cloud}", file=sys.stderr)
             return 3
 
