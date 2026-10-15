@@ -135,6 +135,15 @@ flowchart TD
 3. **Git-First Local Access (`git show HEAD:<шлях>`) та детерміністичний 34-пунктний валідатор політики:** Повний відхід від одноразових термінальних скриптів на користь детерміністичних системних інструментів і читання першоджерел через Git.
 4. **Апаратне профілювання заліза (16 ГБ RAM, ліміти моделі <=7B) та RouteLLM/FrugalGPT прогнозування ваги токенів:** Замість ручного запуску кастомних скриптів сесії запит завжди оцінюється математично ($N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$) і скеровується на локальну Ollama ($\le 60$ токенів виводу) або Groq LPU ($> 60$ токенів) у межах SLA Quantum $\le 30.0$ с.
 
+### 📊 П'ять структурованих віджетів взаємодії (The 5 Interactive Widgets Framework)
+
+Для усунення монотонного виводу термінальних команд («суцільної строки») регламентовано 5 спеціалізованих віджетів та протоколів:
+1. **Віджет 1: Git Discovery & Ollama Dispatch Card:** Забезпечує прозору візуалізацію знайдених файлів у Git та вихідного тексту промпту до моделі (`qwen2.5-coder`) із обов'язковою фіксацією бейджа `🔁 RETRY / FAILOVER ATTEMPT #N` при виникненні затримок чи збоїв.
+2. **Віджет 2: Прогноз ваги токенів RouteLLM та Verbatim Payload Log:** Включає в `implementation_plan.md` математичний розрахунок $N_{\text{in}}$, $N_{\text{out}}$, ETC, лімітів SLA ($\le 30$ с) та квот Safe Budget Groq (-20%), а також повний текст запиту до провайдера і отриману відповідь моделі.
+3. **Віджет 3: Протокол санкції `+!` (Attention & Corrections Gate):** Розрізняє безумовне схвалення (`+`) та умовне (`+!`), яке вимагає зупинки агента, виводу картки `⚠️ [ATTENTION GATE]` та підтвердження врахування кожної правки користувача (`[CONFIRMED & APPLIED]`) перед зміною файлів.
+4. **Віджет 4: Степер побудови коду & Pre-Deployment Arbiter Gate (`+` / `-`):** Візуалізує покроковий процес синтезу, AST-компіляції та хешування SLSA, а перед викликом `push_to_github.sh` запитує вибір: `+` (запуск арбітражу Tier 4 Claude Sonnet 5.5) або `-` (швидкий пуш без арбітражу).
+5. **Віджет 5: Розподілений трекер операцій Git та GitHub CI:** Візуалізує стан локальних операцій (`git add`, `git commit`) та етапів хмарного білду (`[Push]` ➔ `[Trigger]` ➔ `[Job Validate]` ➔ `[Report]`) із локалізацією аварій у реальному часі.
+
 ### 📌 Емпіричні інженерні кейси Фази 4 (Імплементація на цільовий об'єкт та контекст):
 
 #### 🔹 Кейс 1: Стрес-тест на 822 кроки та 6 діб безперервної роботи (Сесія c80fdbd3 — Подолання деградації контексту)
@@ -366,6 +375,15 @@ Based on empirical analysis across four long-lived operational sessions (c80fdbd
    - **Check 1:** Zero Inline-Eval Gate — physical prohibition of `python3 -c`, `bash -c`, and untracked ad-hoc scripts.
 3. **Git-First Local Access (`git show HEAD:<path>`) & Deterministic 34-Point Policy Validator:** Complete elimination of temporary single-use shell scripts in favor of deterministic system tools and reading ground truths directly via Git.
 4. **Hardware-Aware Resource Profiling (16 GB RAM, $\le 7$B Local Model Ceiling) & RouteLLM/FrugalGPT Token Weight Forecasting:** Session-scoped tasks are forecasted using $N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$ and routed to local Ollama ($\le 60$ output tokens) or Groq LPU ($> 60$ tokens) within an SLA Quantum $\le 30.0$ s, eliminating token waste.
+
+### 📊 The 5 Interactive Widgets Framework
+
+To eliminate the "unbroken wall of terminal commands" anti-pattern, 5 dedicated interaction widgets and protocols are codified:
+1. **Widget 1: Git Discovery & Ollama Dispatch Card:** Transparently renders detected Git files and the verbatim prompt payload dispatched to local models (`qwen2.5-coder`), with a mandatory `🔁 RETRY / FAILOVER ATTEMPT #N` badge whenever latency limits or failovers trigger.
+2. **Widget 2: RouteLLM Token Weight Forecast & Verbatim Payload Log:** Embeds mathematical token estimation ($N_{\text{in}}$, $N_{\text{out}}$, ETC, SLA $\le 30$ s) and Groq Safe Budgeting (-20%) directly into `implementation_plan.md`, accompanied by exact verbatim prompt text and raw provider responses with anchor links.
+3. **Widget 3: The `+!` Approval Protocol (Attention & Corrections Gate):** Distinguishes unconditional batch approval (`+`) from attention approval (`+!`), halting execution to display an `⚠️ [ATTENTION GATE]` card confirming each user modification as `[CONFIRMED & APPLIED]` before code changes commence.
+4. **Widget 4: Code Lifecycle Stepper & Pre-Deployment Arbiter Gate (`+` / `-`):** Visually tracks the code lifecycle through synthesis, AST checks, SLSA hashing, and local commit, pausing prior to `push_to_github.sh` with a gate: `+` (execute independent Tier 4 Claude Sonnet 5.5 Arbiter review) or `-` (fast-track push).
+5. **Widget 5: Distributed Git & GitHub CI Live Pipeline Tracker:** Displays discrete stages for local Git operations (`git add`, `git commit`) and remote GitHub Actions CI (`[Push]` ➔ `[Trigger]` ➔ `[Job Validate]` ➔ `[Report]`) to pinpoint build failures instantly.
 
 ### 📌 Empirical Engineering Cases — Phase 4 (Target Implementation & Context Stress-Test):
 

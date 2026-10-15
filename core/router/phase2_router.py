@@ -141,6 +141,23 @@ def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec
     }
     return decision
 
+def format_route_widget(dec: dict) -> str:
+    """Форматування рішення маршрутизатора у вигляді структурованого віджета для чату та плану."""
+    sla_status = "🟢 PASS" if dec["estimated_time_sec"] <= dec["sla_seconds"] else "🔴 SLA EXCEEDED"
+    lines = [
+        "┌────────────────────────────────────────────────────────────────────────┐",
+        "│ 📈 [ROUTELM TOKEN WEIGHT & THROUGHPUT DISPATCH WIDGET]                 │",
+        "├────────────────────────────────────────────────────────────────────────┤",
+        f"│ • Модель / Провайдер : Tier {dec['tier']} | {dec['model']} ({dec['provider']})",
+        f"│ • Вхідні токени (Nin): {dec['prompt_tokens']} tok | Вихід (Nout): {dec['estimated_out_tokens']} tok",
+        f"│ • Розрахунковий час  : {dec['estimated_time_sec']} с (SLA ліміт: {dec['sla_seconds']} с) [{sla_status}]",
+        f"│ • Адаптивний таймаут : {dec['adaptive_timeout_sec']} с",
+        f"│ • LiteLLM Safe Budget: {dec['groq_budget']['tokens_expected']} / {dec['groq_budget']['safe_minute_quota']} TPM (Headroom: OK)",
+        f"│ • Обґрунтування      : {dec['reason']}",
+        "└────────────────────────────────────────────────────────────────────────┘"
+    ]
+    return "\n".join(lines)
+
 def main():
     parser = argparse.ArgumentParser(description="Phase 2 Plan Validator & Dynamic Resource Router (Antigravity_Mgr)")
     parser.add_argument("--validate-plan", type=str, help="Перевірка файлу implementation_plan.md")
@@ -149,6 +166,7 @@ def main():
     parser.add_argument("--out-tokens", type=int, default=250, help="Орієнтовна кількість токенів генерації")
     parser.add_argument("--sla-sec", type=float, default=30.0, help="Максимальний допустимий час генерації (SLA)")
     parser.add_argument("--no-cloud", action="store_true", help="Заборонити хмарний оверфлоу (суворо офлайн)")
+    parser.add_argument("--format-widget", action="store_true", help="Вивести результат у вигляді структурованого віджета")
 
     args = parser.parse_args()
 
@@ -156,7 +174,10 @@ def main():
         return validate_plan(args.validate_plan)
     elif args.route:
         dec = calculate_route(args.prompt_tokens, args.out_tokens, sla_sec=args.sla_sec, allow_cloud=not args.no_cloud)
-        print(json.dumps(dec, indent=2, ensure_ascii=False))
+        if args.format_widget:
+            print(format_route_widget(dec))
+        else:
+            print(json.dumps(dec, indent=2, ensure_ascii=False))
         return 0
     else:
         parser.print_help()
@@ -164,3 +185,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

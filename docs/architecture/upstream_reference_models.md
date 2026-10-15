@@ -105,4 +105,15 @@ $$\text{Timeout}_{\text{adaptive}} = \max(30, \text{int}(1.5 \times \text{ETC}) 
    ./setup_and_verify.sh
    ```
 
+---
+
+## 5. Стандарт прозорості запитів та Verbatim Payload Logging (Anti-Black-Box Rule)
+
+Для запобігання перетворенню агентів на «чорні ящики» регламентовано стандартизований протокол прозорості:
+1. **Verbatim Prompt Logging:** Кожен запит до моделі (Tier 1 Ollama чи Tier 2 Groq LPU) фіксується у вигляді повного тексту промпту без прихованих скорочень.
+2. **Raw Response Capture:** Відповідь провайдера реєструється у вихідному вигляді та отримує якірне посилання (`[id: provider-query-N]`).
+3. **Plan Interpretation Parity:** В `implementation_plan.md` та звітах інженерний висновок обов'язково посилається на точний фрагмент відповіді моделі.
+4. **Retry & Failover Transparency:** У разі виникнення таймауту, синтаксичного дефекту чи перевищення кванта SLA (30 с) агент зобов'язаний вивести картку `🔁 [RETRY / FAILOVER ATTEMPT #N]` із зазначенням точної причини збою та тексту повторного/скоригованого промпту.
+
 👉 Докладний емпіричний аналіз та кейс-стаді див. у **[`PoC/case_study_session_ee6e8ead_longevity.md`](../../PoC/case_study_session_ee6e8ead_longevity.md)**.
+

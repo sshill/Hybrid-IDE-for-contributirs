@@ -101,6 +101,10 @@ def print_original_report(run: dict, jobs_data: dict, verbose_json: bool = False
 
     print("\n" + "=" * 70)
     print("🌐 ОРИГІНАЛЬНЕ ПОВІДОМЛЕННЯ GITHUB ACTIONS: " + str(run.get("path", DEFAULT_WORKFLOW)))
+    print("┌────────────────────────────────────────────────────────────────────┐")
+    print("│ 🚀 [REMOTE GITHUB ACTIONS CI/CD PIPELINE STATUS]                   │")
+    print("│ [1. Push] ➔ [2. Trigger] ➔ [3. Init] ➔ [4. Validate] ➔ [5. Report] │")
+    print("└────────────────────────────────────────────────────────────────────┘")
     print("=" * 70)
     print(f"Workflow:      {workflow_name}")
     print(f"Run ID:        {run_id}")
