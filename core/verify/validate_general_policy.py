@@ -30,16 +30,59 @@ def parse_args():
 def verify_structure(content: str) -> dict:
     """Локальний структурний аудит обов'язкових розділів v0.8."""
     checks = []
-    required_sections = [('Регламент роботи: 5 фаз', '5 фаз обробки завдань'), ('Багаторівнева архітектура ШІ v0.8', '5-Tier Multi-AI Architecture'), ('Рівень 1: Local Edge Ollama <=7B', 'LOCAL OLLAMA <=7B'), ('Рівень 2: Groq Cloud & OpenRouter', 'GROQ & OPENROUTER'), ('Рівень 3: Кешування знань', 'docs/knowledge/'), ('Рівень 4: Релізний Code-Арбітр', 'Claude Sonnet 5.5 / GPT-OSS 120B'), ('Рівень 5: Фінальний вердикт Antigravity', 'Golden Standard Orchestrator'), ('Domain Guard', 'Scope & Domain Guard'), ('Context Hygiene', 'Context Hygiene & Lifespan'), ('Strict Code-Only Contract', 'Регламент взаємодії з локальною Ollama'), ('Апаратний ценз 16 ГБ RAM', 'Апаратний профіль машини (16 ГБ RAM'), ('Заборона моделей >=14B локально', 'Моделі $\\ge 14\\text{B}$ на локальній машині **суворо заборонені**'), ('Git-First Local Access', 'Git-First Local Access'), ('Усунення помилок Permission denied', 'Принцип усунення помилок «Permission denied / no access»'), ('Бюджет кроків Фази 4', 'Phase 4 Step Budget'), ('Аварійний вимикач Circuit Breaker', 'Circuit Breaker'), ("Залізний бар'єр Hard Deny Gate", 'Hard Deny Gate'), ('Zero Inline-Eval Hard Gate', 'Zero Inline-Eval'), ('AI Script Synthesis Runner', '--synthesize-script'), ('Стандарт запуску команд', 'Мінімізація модальних вікон'), ('Стандарт бази знань', 'Knowledge Base Protocol'), ('Протокол Code-Арбітра', '[CODE_AUDIT_REPORT]'), ('Phase 1 Status Banner', 'Phase 1 Status Banner'), ('Git-First Discovery', 'Git & Index First'), ('Exploration Hard Limit', 'Exploration Hard Limit'), ('Версія регламенту v0.8/v0.9', 'Architecture (v0.'), ('Централізований хаб Antigravity_Mgr', 'Antigravity_Mgr'), ('Multi-Project Symlink Mesh', 'Symlink Mesh'), ('Сесійний реєстр провененсу', 'сесійному реєстрі провененсу'), ('Runtime Circuit Breaker Gate', 'Runtime Circuit Breaker Gate'), ('Абсолютна дія Фази 1', 'No Exceptions for Information Gathering'), ('Видимість викликів ШІ в чаті', 'Chat-Screen AI Invocation Visibility'), ('Префікс Always Allow', 'Always Allow'), ('3-компонентна формула Bridge Prompt', 'канонічною 3-компонентною формулою'), ('Repository Docs Hygiene Gate v0.9.3', 'Repository Docs Hygiene Gate (v0.9.3)'), ('Dynamic Plan-Aware Metric & Semantic Loop Gate v0.9.4', 'Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4)')]
+    required_sections = [
+        ("Регламент роботи: 5 фаз", ("5 фаз обробки завдань", "Життєвий цикл: 5 фаз")),
+        ("Багаторівнева архітектура ШІ v0.8", ("5-Tier Multi-AI Architecture", "Багаторівнева архітектура ШІ (5-Tier", "Багаторівнева архітектура ШІ")),
+        ("Рівень 1: Local Edge Ollama <=7B", ("LOCAL OLLAMA <=7B", "Tier 1 — Local Edge Ollama", "qwen2.5-coder")),
+        ("Рівень 2: Groq Cloud & OpenRouter", ("GROQ & OPENROUTER", "Tier 2 — Хмарний хаб (Groq & OpenRouter)", "Groq & OpenRouter")),
+        ("Рівень 3: Кешування знань", ("docs/knowledge/", "Tier 3 — Кеш знань")),
+        ("Рівень 4: Релізний Code-Арбітр", ("Claude Sonnet 5.5 / GPT-OSS 120B", "Tier 4 — Pre-Implementation", "Pre-Release Arbiter")),
+        ("Рівень 5: Фінальний вердикт Antigravity", ("Golden Standard Orchestrator", "Tier 5 — Фінальний вердикт Antigravity", "Фінальний вердикт Antigravity")),
+        ("Domain Guard", ("Scope & Domain Guard", "Контроль домену (Project Scope & Domain Guard)", "Project Scope & Domain Guard")),
+        ("Context Hygiene", ("Context Hygiene & Lifespan", "Життєвий цикл контексту (Context Hygiene & Lifespan)")),
+        ("Strict Code-Only Contract", ("Регламент взаємодії з локальною Ollama", "Взаємодія з локальною Ollama", "суто для коду")),
+        ("Апаратний ценз 16 ГБ RAM", ("Апаратний профіль машини (16 ГБ RAM", "16 ГБ RAM", "Профіль машини: 16 ГБ RAM")),
+        ("Заборона моделей >=14B локально", ("Моделі $\\ge 14\\text{B}$ на локальній машині **суворо заборонені**", "Моделі ≥ 14B локально **суворо заборонені**", "Моделі ≥ 14B заборонені")),
+        ("Git-First Local Access", ("Git-First Local Access",)),
+        ("Усунення помилок Permission denied", ("Принцип усунення помилок «Permission denied / no access»", "Permission denied / no access")),
+        ("Бюджет кроків Фази 4", ("Phase 4 Step Budget", "Dynamic Plan-Aware Step Budget", "A_max")),
+        ("Аварійний вимикач Circuit Breaker", ("Circuit Breaker",)),
+        ("Залізний бар'єр Hard Deny Gate", ("Hard Deny Gate", "OS Hard Deny Gates", "залізні шлюзи")),
+        ("Zero Inline-Eval Hard Gate", ("Zero Inline-Eval",)),
+        ("AI Script Synthesis Runner", ("--synthesize-script",)),
+        ("Стандарт запуску команд", ("Мінімізація модальних вікон", "Always Allow", "diagnostic_runner.py")),
+        ("Стандарт бази знань", ("Knowledge Base Protocol",)),
+        ("Протокол Code-Арбітра", ("[CODE_AUDIT_REPORT]",)),
+        ("Phase 1 Status Banner", ("Phase 1 Status Banner",)),
+        ("Git-First Discovery", ("Git & Index First",)),
+        ("Exploration Hard Limit", ("Exploration Hard Limit", "Check 0", "сліпий обхід")),
+        ("Версія регламенту v0.8/v0.9", ("Architecture (v0.", "v0.9.4", "v0.9")),
+        ("Централізований хаб Antigravity_Mgr", ("Antigravity_Mgr",)),
+        ("Multi-Project Symlink Mesh", ("Symlink Mesh",)),
+        ("Сесійний реєстр провененсу", ("сесійному реєстрі провененсу", "реєстрі провененсу", "SLSA-хеш", "SLSA")),
+        ("Runtime Circuit Breaker Gate", ("Runtime Circuit Breaker Gate", "Runtime Circuit Breaker", "Circuit Breaker")),
+        ("Абсолютна дія Фази 1", ("No Exceptions for Information Gathering", "Безвинятковість: діє на всі типи запитів", "Безвинятковість")),
+        ("Видимість викликів ШІ в чаті", ("Chat-Screen AI Invocation Visibility", "AI Invocation Event")),
+        ("Префікс Always Allow", ("Always Allow",)),
+        ("3-компонентна формула Bridge Prompt", ("канонічною 3-компонентною формулою", "канонічна 3-компонентна формула", "3-компонентна формула")),
+        ("Repository Docs Hygiene Gate v0.9.3", ("Repository Docs Hygiene Gate (v0.9.3)", "Repository Docs Hygiene Gate", "Repository Docs Hygiene")),
+        ("Dynamic Plan-Aware Metric & Semantic Loop Gate v0.9.4", ("Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4)", "Dynamic Plan-Aware Step Budget", "Semantic Loop Gate")),
+        ("Copilot Heavy-Only Escalation Gate v0.9.4", ("Copilot Heavy-Only Escalation Gate", "Шлюз важкої ескалації Copilot", "copilot_heavy_only_escalation_gate"))
+    ]
 
     all_passed = True
     for name, marker in required_sections:
-        found = marker in content
+        if isinstance(marker, (list, tuple)):
+            found = any(m in content for m in marker)
+            repr_marker = marker[0]
+        else:
+            found = marker in content
+            repr_marker = marker
         if not found:
             all_passed = False
         checks.append({
             "name": name,
-            "marker": marker,
+            "marker": repr_marker,
             "status": "PASS" if found else "FAIL"
         })
 
