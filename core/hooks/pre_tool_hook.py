@@ -139,6 +139,32 @@ def main():
 
 
         # ============================================================
+        # COPILOT HEAVY-ONLY ESCALATION GATE (Policy v0.9.4):
+        # Заборонено викликати GitHub Copilot CLI на дрібниці або рутинні аудити.
+        # Дозволено виключно при: (1) прапорці --heavy-refactor, (2) /tmp/antigravity_audit_failed.flag, (3) цільовому рефакторингу кодової бази цілком.
+        # ============================================================
+        if "copilot" in cmd_line:
+            is_copilot_cli = any(tok in ("copilot", "/home/hills/.local/bin/copilot") for tok in cmd_line.split())
+            if is_copilot_cli and not ("copilot help" in cmd_line or "copilot --version" in cmd_line or "copilot /login" in cmd_line):
+                audit_failed = os.path.exists("/tmp/antigravity_audit_failed.flag")
+                heavy_refactor = "--heavy-refactor" in cmd_line or "рефакторинг" in cmd_line.lower() or "wholesale" in cmd_line.lower()
+                if not (audit_failed or heavy_refactor):
+                    log(f"HARD DENY: Copilot invoked for non-heavy task: {cmd_line}")
+                    res = {
+                        "decision": "deny",
+                        "reason": (
+                            "HARD GATE VIOLATION (Copilot Heavy-Only Escalation Gate v0.9.4):\n"
+                            "Виклик GitHub Copilot CLI заблоковано! Рутинний аудит та дрібні правки виконуються "
+                            "на токенах Antigravity (Google AI Pro) та Tier 1/2.\n"
+                            "Copilot резервується виключно для:\n"
+                            "1) Негативного вердикту аудиту Antigravity (/tmp/antigravity_audit_failed.flag)\n"
+                            "2) Монолітного рефакторингу всього коду під ключ (прапорець '--heavy-refactor')."
+                        )
+                    }
+                    print(json.dumps(res))
+                    return
+
+        # ============================================================
         # RUNTIME CIRCUIT BREAKER GATE (v0.8.2): Зупинка після 2 збоїв
         # ============================================================
         cb_file = "/tmp/antigravity_circuit_breaker_fails.txt"

@@ -144,6 +144,12 @@
 2. **Формат висновку `[CODE_AUDIT_REPORT]`:** Engine, Syntax Verdict (PASS/WARN/FAIL), Findings, Proposed Diff.
 3. **Верифікація Antigravity:** Синтаксис Python (`py_compile`), Protobuf ICD (`protoc`), детермінізм таймінгів 1 мс у HIL-тестах, локальний коміт:
    `feat(<scope>): <опис> [generated: <code_model> | verified: antigravity]`.
+4. **Шлюз важкої ескалації Copilot та локальна автономія Git (Policy v0.9.4):**
+   - **Первинний аудит та рутина на Antigravity:** Доки активні ліцензії/токени в Antigravity (Google AI Studio/Pro), аудит, діагностика та перевірки виконуються оркестратором (Tier 0 / Tier 4 Antigravity pool) та Tier 1/2 (0$). Заборонено викликати GitHub Copilot на дрібниці чи поодинокі файли.
+   - **Тригери виклику GitHub Copilot CLI (Claude Sonnet 5.5 / o1):** Підключення дозволено виключно у двох випадках:
+     1) Негативний вердикт аудиту Antigravity (`FAIL` / `REJECT`);
+     2) Пряма задача на монолітний рефакторинг всієї кодової бази («під ключ»: весь регламент цілком або мод Fallout 4 разом із деревом Papyrus-залежностей).
+   - **Політика Git («Не ганяємо все на GitHub»):** Локальні коміти виконуються автономно для фіксації прогресу; віддалений пуш (`git push` / `push_to_github.sh`) виконується виключно для фінальних релізів версій за явної команди розробника.
 
 ---
 

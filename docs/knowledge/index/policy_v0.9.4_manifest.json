@@ -91,6 +91,13 @@
     "dynamic_plan_aware_step_budget_gate": "active",
     "semantic_loop_gate": "active",
     "plan_divergence_gate": "active",
+    "copilot_heavy_only_escalation_gate": {
+      "status": "active",
+      "mode": "heavy_refactoring_and_failed_audit_only",
+      "prohibited_for_routine_edits": true,
+      "prohibited_for_primary_audit": true,
+      "remote_push_policy": "explicit_release_only"
+    },
     "rule_of_two_lifecycle_artifacts": [
       "implementation_plan.md",
       "walkthrough.md",
