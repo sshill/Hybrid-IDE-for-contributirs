@@ -67,7 +67,8 @@ def evaluate_command(raw_cmd: str, strict: bool = False) -> tuple[bool, str]:
         return True, "Empty command allowed."
 
     # 0. Hard Deny: Заборона сліпого шелл-краулінгу через ls/dir (Git & Index First v0.9.0)
-    cmd_tokens = cmd.split()
+    clean_cmd = cmd.strip().strip("\"'").strip()
+    cmd_tokens = [t.strip("\"'") for t in clean_cmd.split()]
     if cmd_tokens and cmd_tokens[0] in ("ls", "dir"):
         return False, (
             "HARD GATE VIOLATION (Git & Index First Protocol v0.9.0): "
@@ -138,8 +139,11 @@ def evaluate_tool_call_json(data: dict) -> dict:
             normalized = target_file.replace("\\", "/").lower()
             base_name = os.path.basename(normalized)
 
-            whitelist_exts = (".md", ".json", ".yaml", ".yml", ".txt", ".gitignore", ".cfg", ".ini", ".toml", ".log", ".csv", ".tsv", ".sql", ".html", ".css")
-            is_doc = (
+            controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java")
+            is_code_file = any(normalized.endswith(ext) for ext in controlled_code_exts)
+
+            whitelist_exts = (".md", ".json", ".yaml", ".yml", ".txt", ".gitignore", ".cfg", ".ini", ".toml", ".log", ".csv", ".tsv", ".sql", ".html", ".css", ".svg", ".png", ".jpg", ".jpeg")
+            is_doc = not is_code_file and (
                 base_name in ("walkthrough.md", "implementation_plan.md", "readme.md") or
                 "/brain/" in normalized or
                 "/docs/" in normalized or
@@ -147,14 +151,25 @@ def evaluate_tool_call_json(data: dict) -> dict:
                 any(normalized.endswith(ext) for ext in whitelist_exts)
             )
 
-            in_scratch = (
-                "/scratch/" in normalized or
-                normalized.startswith("scratch/") or
-                "/tmp/" in normalized or
-                "/temporary/" in normalized
-            )
+            # Автоматичне керування життєвим циклом Фази 4 через ключові артефакти
+            if base_name == "implementation_plan.md":
+                try:
+                    with open("/tmp/antigravity_phase4_active.flag", "w") as pf:
+                        pf.write("active")
+                    with open("/tmp/antigravity_phase4_steps.txt", "w") as sf:
+                        sf.write("0")
+                except Exception:
+                    pass
+            elif base_name == "walkthrough.md":
+                try:
+                    if os.path.exists("/tmp/antigravity_phase4_active.flag"):
+                        os.remove("/tmp/antigravity_phase4_active.flag")
+                    if os.path.exists("/tmp/antigravity_phase4_steps.txt"):
+                        os.remove("/tmp/antigravity_phase4_steps.txt")
+                except Exception:
+                    pass
 
-            if not is_doc and not in_scratch:
+            if not is_doc:
                 abs_target = os.path.abspath(target_file)
                 code_content = args.get("CodeContent", "")
                 repl_content = args.get("ReplacementContent", "")

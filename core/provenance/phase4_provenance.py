@@ -177,6 +177,32 @@ def run_verified_script(script_path: str, script_args: list) -> int:
         print(f"❌ Помилка виконання: {e}", file=sys.stderr)
         return 1
 
+def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
+    """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1)."""
+    import re
+    match = re.search(r"generated:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
+    if not match:
+        return True, "Атрибуція ШІ відсутня в коміті (ручний або структурний коміт)."
+
+    model_claimed = match.group(1).strip().lower()
+    ledger = load_ledger()
+    if not ledger:
+        return False, f"Реєстр провененсу порожній: генерацію моделлю '{model_claimed}' не підтверджено."
+
+    matched_entries = []
+    for path, entry in ledger.items():
+        entry_model = entry.get("model", "").strip().lower()
+        if model_claimed in entry_model or entry_model in model_claimed:
+            matched_entries.append(path)
+
+    if not matched_entries:
+        return False, (
+            f"Фальсифікація авторства коміту: задекларовано '[generated: {model_claimed}]', "
+            f"але в реєстрі провененсу немає жодного файлу, згенерованого цією моделлю."
+        )
+
+    return True, f"OK (Знайдено {len(matched_entries)} зареєстрованих файлів для моделі {model_claimed})"
+
 def main():
     parser = argparse.ArgumentParser(description="Phase 4 Provenance Ledger & Anti-Shadow Gate (Policy v0.9.1)")
     parser.add_argument("--register", type=str, help="Зареєструвати ШІ-скрипт у сесійному реєстрі")
@@ -187,6 +213,7 @@ def main():
     parser.add_argument("--duration-ms", type=float, default=None, help="Тривалість оцінки промпту у мс")
     parser.add_argument("--verify", type=str, help="Перевірити валідність провененсу файлу")
     parser.add_argument("--verify-hash", type=str, help="Перевірити валідність SHA256 хешу")
+    parser.add_argument("--verify-commit", type=str, help="Перевірити валідність атрибуції моделі в повідомленні коміту")
     parser.add_argument("--run", type=str, help="Запустити валідований скрипт")
     parser.add_argument("script_args", nargs="*", help="Аргументи для скрипта")
 
@@ -209,6 +236,10 @@ def main():
     elif args.verify_hash:
         valid, msg, entry = verify_content_sha256(args.verify_hash)
         print(f"Верифікація хешу: {'🟢 PASS' if valid else '🔴 FAIL'} — {msg}")
+        return 0 if valid else 1
+    elif args.verify_commit:
+        valid, msg = verify_commit_attribution(args.verify_commit)
+        print(f"Верифікація коміту: {'🟢 PASS' if valid else '🔴 FAIL'} — {msg}")
         return 0 if valid else 1
     elif args.run:
         return run_verified_script(args.run, args.script_args)
