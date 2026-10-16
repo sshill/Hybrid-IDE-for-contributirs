@@ -27,12 +27,7 @@
   4. План перевірки.
 - **RouteLLM Token Forecast:**
 
-| Параметр | Вимога |
-|---|---|
-| $N_{\text{in}}$, $N_{\text{out}}$ | оцінка вхідних і вихідних токенів |
-| ETC | розрахунковий час виконання |
-| SLA | $\text******30{,}0$ с |
-| LiteLLM Safe Budget | $B_{\text{safe}} = 0{,}8 \cdot B_{\text{limit}}$ (−20%) |
+- **RouteLLM Token Forecast:** $N_{\text{in}}, N_{\text{out}}$ (оцінка токенів), ETC, SLA $\text******30{,}0$ с, LiteLLM Safe Budget $B_{\text{safe}} = 0{,}8 \cdot B_{\text{limit}}$ (−20%).
 
 - **Verbatim Payload Logging:** повний текст промпту, сира відповідь моделі та її архітектурна інтерпретація з якірним посиланням.
 - **Генерація контракту Фази 4:** `/tmp/antigravity_phase4_contract.json` (дозволені файли, $N_{\text{files}}$, $N_{\text{tests}}$).
@@ -45,7 +40,7 @@
 | Сигнал | Назва | Дія |
 |---|---|---|
 | `+` | Unconditional Batch Approval | Негайний перехід до Фази 4 |
-| `+!` | Attention & Corrections Gate | Пауза, картка `⚠️ [ATTENTION GATE: USER CORRECTIONS DETECTED]`, кожна правка підтверджується як `[CONFIRMED & APPLIED]`, дельта фіксується в плані, лише потім Фаза 4 |
+| `+!` | Attention & Corrections Gate | Пауза, картка `⚠️ [ATTENTION GATE]`, правки фіксуються як `[CONFIRMED & APPLIED]`, потім Фаза 4 |
 
 - **Заборонено без явного `+`/`+!`:** ⏪ `git reset`/`revert`/`restore`; 🔀 `git merge`/`rebase`; 🌐 `git push origin`/PR.
 
@@ -77,13 +72,7 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 ## 2. Багаторівнева архітектура ШІ (5-Tier, v0.9.5)
 
 ```
-[ANTIGRAVITY — ОРКЕСТРАТОР (Tier 0)]  оцінка, 5 фаз, Git-буфер, контроль
-  ├── [T1: LOCAL OLLAMA ≤7B]            Primary Workhorse (0$)
-  ├── [T2: GROQ LPU & OPENROUTER]       Hardware Fallback Hub (free tier)
-  ├── [T3: KNOWLEDGE CACHE]             docs/knowledge/ (Git, без мережі)
-  ├── [T4: PRE-IMPLEMENTATION ARBITER]  Antigravity pool / GPT-OSS 120B → [CODE_AUDIT_REPORT]
-  └── [T5: FINAL VERDICT]               Antigravity (Golden Standard: HIL, Caprica)
-        ⤷ Copilot Heavy-Only Escalation Gate (див. §8.4) — поза рутинним потоком
+[Tier 0: Antigravity] ➔ [T1: Ollama ≤7B] | [T2: Groq & OpenRouter] | [T3: docs/knowledge/] | [T4: Pre-Release Arbiter] | [T5: Final Verdict]
 ```
 
 ### 2.0 Першість Оркестратора
@@ -125,10 +114,8 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 - Результати бойових тестів дублюються в чат і в `implementation_plan.md` / `walkthrough.md`.
 
 ### 2.7 Dual-Layer Representation (віджети)
-| Шар | Реалізація | Призначення |
-|---|---|---|
-| **A** | Native Markdown Cards у чаті (емодзі, таблиці, ліміт висоти знято) | Основний канал, надійність 100% |
-| **B** | Generative UI HTML Sidecar Artifacts | Повнорозмірні дашборди бічної панелі |
+- **Шар A (обов'язковий):** Native Markdown Cards у чаті (емодзі, таблиці, ліміт висоти знято).
+- **Шар B (додатковий):** Generative UI HTML Sidecar Artifacts (дашборди бічної панелі).
 
 Шар A обов'язковий. Шар B є доповненням і не замінює A.
 
@@ -171,18 +158,14 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 
 ### 6.2 OS Hard Deny Gates (`pre_tool_hook.py`)
 
-| # | Шлюз | Дія |
-|---|---|---|
-| 0 | **Git & Index First** | Блокує сліпий обхід дисків (`ls`/`dir`/`find`) |
-| 1 | **Zero Inline-Eval** | Блокує `python -c`, `bash -c`, `eval`, `exec` |
-| 2 | **Runtime Circuit Breaker** | Зупиняє ReAct-цикл після 2 послідовних збоїв |
-| 3 | **Git Safety** | Блокує `git reset/revert/restore/push/merge/rebase` без дозволу |
-| 4 | **Selective Code Guard** | Див. нижче |
-| 5 | **Repository Docs Hygiene** | Див. нижче |
-| 6 | **Commit Provenance** | Блокує `[generated: <model>]` без запису в реєстрі (`/tmp` та `~/.agents/`) |
-| 7 | **Dynamic Plan-Aware Step Budget** | $A_{\max}=\max(25,\,4N_{\text{files}}+2N_{\text{tests}}+10)$ за контрактом Фази 2 |
-| 8 | **Semantic Loop Gate** | $W=4$, зупинка на 2-му повторенні |
-| 9 | **Plan Divergence Gate** | Забороняє мутацію файлів поза контрактом |
+**Шлюзи безпеки (`pre_tool_hook.py`):**
+- **Git & Index First (Check 0):** блокує сліпий обхід дисків (`ls`/`dir`/`find`).
+- **Zero Inline-Eval:** блокує `python -c`, `bash -c`, `eval`, `exec`.
+- **Runtime Circuit Breaker Gate:** зупиняє цикл після 2 збоїв інструментів.
+- **Git Safety Gate:** блокує несанкціоновані деструктивні команди Git.
+- **Commit Provenance Gate:** блокує `[generated: ...]` без запису в сесійному реєстрі провененсу.
+- **Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4):** вікно $W=4$, зупинка на 2-му повторенні; $A_{\max}=\max(25,\,4N_{\text{files}}+2N_{\text{tests}}+10)$.
+- **Plan Divergence Gate:** блокує мутацію файлів поза затвердженим планом.
 
 **Selective Code Guard** (`write_to_file`, `replace_file_content`):
 - Конфігурації `*.json`, `*.yaml`, `*.yml`, `*.txt`, `.gitignore`, `.cfg`, `.ini`, `.toml` редагуються без тертя.
@@ -242,10 +225,3 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 2. **Незмінність бар'єрів:** оверлей може додавати правила рушія чи середовища. Він не може послаблювати 5 фаз циклу, залізні шлюзи `pre_tool_hook.py` (§6.2), Git-First Local Access, Heavy-Only Gate (§8.4) та апаратний ценз 16 ГБ RAM.
 
 ---
-
-### Нотатки до рефакторингу
-- Прибрано залишки v0.7/v0.8: «Routing Matrix v0.7.1» замінено на безверсійну Pre-Flight Routing Matrix, а `branch: v0.8` у маніфесті варто оновити на `v0.9`.
-- Знято суперечність між Tier 4 «Claude Sonnet 5.5» і Heavy-Only Gate: Claude залишається лише за двома тригерами.
-- Знято суперечність між Remote CI Gate і забороною автопушу: CI-перевірка діє лише при авторизованому релізі.
-- Межі індикатора контексту уточнено: 🟡 = 601–800.
-- Файл не збережено на диск і валідатор `validate_general_policy.py` не запускався. Розмір ядра слід звірити з `core_kernel_byte_limit` (20 480 байт) і оновити `core_kernel_current_bytes` у маніфесті.
