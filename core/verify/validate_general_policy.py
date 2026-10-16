@@ -56,7 +56,7 @@ def verify_structure(content: str) -> dict:
         ("Phase 1 Status Banner", ("Phase 1 Status Banner",)),
         ("Git-First Discovery", ("Git & Index First",)),
         ("Exploration Hard Limit", ("Exploration Hard Limit", "Check 0", "сліпий обхід")),
-        ("Версія регламенту v0.8/v0.9", ("Architecture (v0.", "v0.9.4", "v0.9")),
+        ("Версія регламенту v0.8/v0.9", ("Architecture (v0.", "v0.9.5", "v0.9.4", "v0.9")),
         ("Централізований хаб Antigravity_Mgr", ("Antigravity_Mgr",)),
         ("Multi-Project Symlink Mesh", ("Symlink Mesh",)),
         ("Сесійний реєстр провененсу", ("сесійному реєстрі провененсу", "реєстрі провененсу", "SLSA-хеш", "SLSA")),

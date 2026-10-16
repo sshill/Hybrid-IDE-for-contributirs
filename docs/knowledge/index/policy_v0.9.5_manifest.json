@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Antigravity General Execution Policy Manifest v0.9.5",
+  "version": "0.9.5",
+  "branch": "v0.8",
+  "updated_at": "2026-10-16T21:00:00+03:00",
+  "rollback_baseline_tag": "v0.9.4",
+  "rollback_targets": {
+    "Hybrid-IDE-for-contributors": "6749384",
+    "Documents": "398f822"
+  },
+  "policy_document": "/home/hills/Documents/GEMINI.md",
+  "policy_reference_document": "/home/hills/Documents/docs/knowledge/index/policy_v0.9_reference.md",
+  "core_kernel_byte_limit": 24576,
+  "core_kernel_current_bytes": 22410,
+  "system_prompt_truncation_bytes": 0,
+  "validator_script": "/home/hills/Documents/.agents/scripts/validate_general_policy.py",
+  "antigravity_mgr": "/home/hills/Documents/Antigravity_Mgr",
+  "stable_runners": [
+    "/home/hills/Documents/.agents/scripts/diagnostic_runner.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase1_inspect.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase2_router.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py",
+    "/home/hills/Documents/Antigravity_Mgr/tools/phase5_verify.py"
+  ],
+  "lifecycle": {
+    "phases": 5,
+    "phase_1_requirements": {
+      "mandatory_status_banner": true,
+      "context_hygiene_indicator": true,
+      "git_first_discovery": true,
+      "orchestrator_first_assessment": true,
+      "ai_synthesis_pipeline": true,
+      "diagnostic_batch_access": true,
+      "no_exceptions_for_information_gathering": true,
+      "silent_looping_prohibited": true,
+      "online_escalation_protocol": true,
+      "absence_verification_gate": true
+    },
+    "phase_2_requirements": {
+      "implementation_plan_artifact": true,
+      "pre_flight_routing_matrix": true,
+      "dynamic_throughput_routing_model": true,
+      "routellm_sla_model": true,
+      "litellm_safe_budget_guard": true,
+      "phase_4_contract_generation": true
+    },
+    "phase_3_requirements": {
+      "approval_gate": true,
+      "attention_corrections_gate": true,
+      "batch_execution_access": true,
+      "forbidden_without_approval": [
+        "git reset",
+        "git revert",
+        "git restore",
+        "git merge",
+        "git push origin"
+      ]
+    },
+    "phase_4_requirements": {
+      "execution_status_report": true,
+      "primary_workhorse_ollama": true,
+      "hardware_fallback_groq": true,
+      "pre_implementation_arbiter_claude": true,
+      "git_first_local_access": true,
+      "modified_objects_accounting": true,
+      "dynamic_plan_aware_step_budget": true,
+      "semantic_loop_gate": true,
+      "plan_divergence_gate": true,
+      "selective_code_guard": true,
+      "rule_of_two_lifecycle_files": true,
+      "repository_docs_hygiene_gate": true,
+      "anti_shadow_provenance_gate": true,
+      "anti_black_box_inference": true
+    },
+    "phase_5_requirements": {
+      "functional_verification_checklist": true,
+      "pre_deployment_arbiter_gate": true,
+      "ai_providers_execution_report": true,
+      "remote_ci_verification_gate": true,
+      "github_actions_live_tracker": true
+    }
+  },
+  "gates": {
+    "zero_inline_eval_gate": "active",
+    "runtime_circuit_breaker_gate": "active",
+    "git_safety_gate": "active",
+    "selective_code_guard_gate": "active",
+    "commit_provenance_gate": "active",
+    "repository_docs_hygiene_gate": "active",
+    "dynamic_plan_aware_step_budget_gate": "active",
+    "semantic_loop_gate": "active",
+    "plan_divergence_gate": "active",
+    "copilot_heavy_only_escalation_gate": {
+      "status": "active",
+      "mode": "heavy_refactoring_and_failed_audit_only",
+      "prohibited_for_routine_edits": true,
+      "prohibited_for_primary_audit": true,
+      "remote_push_policy": "explicit_release_only"
+    },
+    "rule_of_two_lifecycle_artifacts": [
+      "implementation_plan.md",
+      "walkthrough.md",
+      "/brain/"
+    ]
+  }
+}
