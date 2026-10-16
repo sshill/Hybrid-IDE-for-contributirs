@@ -59,42 +59,7 @@ def parse_args():
 def verify_structure(content: str) -> dict:
     """Локальний структурний аудит обов'язкових розділів v0.8."""
     checks = []
-    required_sections = [
-        ("Регламент роботи: 5 фаз", "5 фаз обробки завдань"),
-        ("Багаторівнева архітектура ШІ v0.8", "5-Tier Multi-AI Architecture"),
-        ("Рівень 1: Local Edge Ollama <=7B", "LOCAL OLLAMA <=7B"),
-        ("Рівень 2: Groq Cloud & OpenRouter", "GROQ & OPENROUTER"),
-        ("Рівень 3: Кешування знань", "docs/knowledge/"),
-        ("Рівень 4: Релізний Code-Арбітр", "Claude Sonnet 5.5 / GPT-OSS 120B"),
-        ("Рівень 5: Фінальний вердикт Antigravity", "Golden Standard Orchestrator"),
-        ("Domain Guard", "Scope & Domain Guard"),
-        ("Context Hygiene", "Context Hygiene & Lifespan"),
-        ("Strict Code-Only Contract", "Регламент взаємодії з локальною Ollama"),
-        ("Апаратний ценз 16 ГБ RAM", "Апаратний профіль машини (16 ГБ RAM"),
-        ("Заборона моделей >=14B локально", "Моделі $\\ge 14\\text{B}$ на локальній машині **суворо заборонені**"),
-        ("Git-First Local Access", "Git-First Local Access"),
-        ("Усунення помилок Permission denied", "Принцип усунення помилок «Permission denied / no access»"),
-        ("Бюджет кроків Фази 4", "Phase 4 Step Budget"),
-        ("Аварійний вимикач Circuit Breaker", "Circuit Breaker"),
-        ("Залізний бар'єр Hard Deny Gate", "Hard Deny Gate"),
-        ("Zero Inline-Eval Hard Gate", "Zero Inline-Eval"),
-        ("AI Script Synthesis Runner", "--synthesize-script"),
-        ("Стандарт запуску команд", "Мінімізація модальних вікон"),
-        ("Стандарт бази знань", "Knowledge Base Protocol"),
-        ("Протокол Code-Арбітра", "[CODE_AUDIT_REPORT]"),
-        ("Phase 1 Status Banner", "Phase 1 Status Banner"),
-        ("Git-First Discovery", "Git & Index First"),
-        ("Exploration Hard Limit", "Exploration Hard Limit"),
-        ("Версія регламенту v0.8/v0.9", "Architecture (v0."),
-        ("Централізований хаб Antigravity_Mgr", "Antigravity_Mgr"),
-        ("Multi-Project Symlink Mesh", "Symlink Mesh"),
-        ("Сесійний реєстр провененсу", "сесійному реєстрі провененсу"),
-        ("Runtime Circuit Breaker Gate", "Runtime Circuit Breaker Gate"),
-        ("Абсолютна дія Фази 1", "No Exceptions for Information Gathering"),
-        ("Видимість викликів ШІ в чаті", "Chat-Screen AI Invocation Visibility"),
-        ("Префікс Always Allow", "Always Allow"),
-        ("3-компонентна формула Bridge Prompt", "канонічною 3-компонентною формулою")
-    ]
+    required_sections = [('Регламент роботи: 5 фаз', '5 фаз обробки завдань'), ('Багаторівнева архітектура ШІ v0.8', '5-Tier Multi-AI Architecture'), ('Рівень 1: Local Edge Ollama <=7B', 'LOCAL OLLAMA <=7B'), ('Рівень 2: Groq Cloud & OpenRouter', 'GROQ & OPENROUTER'), ('Рівень 3: Кешування знань', 'docs/knowledge/'), ('Рівень 4: Релізний Code-Арбітр', 'Claude Sonnet 5.5 / GPT-OSS 120B'), ('Рівень 5: Фінальний вердикт Antigravity', 'Golden Standard Orchestrator'), ('Domain Guard', 'Scope & Domain Guard'), ('Context Hygiene', 'Context Hygiene & Lifespan'), ('Strict Code-Only Contract', 'Регламент взаємодії з локальною Ollama'), ('Апаратний ценз 16 ГБ RAM', 'Апаратний профіль машини (16 ГБ RAM'), ('Заборона моделей >=14B локально', 'Моделі $\\ge 14\\text{B}$ на локальній машині **суворо заборонені**'), ('Git-First Local Access', 'Git-First Local Access'), ('Усунення помилок Permission denied', 'Принцип усунення помилок «Permission denied / no access»'), ('Бюджет кроків Фази 4', 'Phase 4 Step Budget'), ('Аварійний вимикач Circuit Breaker', 'Circuit Breaker'), ("Залізний бар'єр Hard Deny Gate", 'Hard Deny Gate'), ('Zero Inline-Eval Hard Gate', 'Zero Inline-Eval'), ('AI Script Synthesis Runner', '--synthesize-script'), ('Стандарт запуску команд', 'Мінімізація модальних вікон'), ('Стандарт бази знань', 'Knowledge Base Protocol'), ('Протокол Code-Арбітра', '[CODE_AUDIT_REPORT]'), ('Phase 1 Status Banner', 'Phase 1 Status Banner'), ('Git-First Discovery', 'Git & Index First'), ('Exploration Hard Limit', 'Exploration Hard Limit'), ('Версія регламенту v0.8/v0.9', 'Architecture (v0.'), ('Централізований хаб Antigravity_Mgr', 'Antigravity_Mgr'), ('Multi-Project Symlink Mesh', 'Symlink Mesh'), ('Сесійний реєстр провененсу', 'сесійному реєстрі провененсу'), ('Runtime Circuit Breaker Gate', 'Runtime Circuit Breaker Gate'), ('Абсолютна дія Фази 1', 'No Exceptions for Information Gathering'), ('Видимість викликів ШІ в чаті', 'Chat-Screen AI Invocation Visibility'), ('Префікс Always Allow', 'Always Allow'), ('3-компонентна формула Bridge Prompt', 'канонічною 3-компонентною формулою'), ('Repository Docs Hygiene Gate v0.9.3', 'Repository Docs Hygiene Gate (v0.9.3)')]
 
     all_passed = True
     for name, marker in required_sections:

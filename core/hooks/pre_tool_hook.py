@@ -142,14 +142,52 @@ def evaluate_tool_call_json(data: dict) -> dict:
             controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java")
             is_code_file = any(normalized.endswith(ext) for ext in controlled_code_exts)
 
-            whitelist_exts = (".md", ".json", ".yaml", ".yml", ".txt", ".gitignore", ".cfg", ".ini", ".toml", ".log", ".csv", ".tsv", ".sql", ".html", ".css", ".svg", ".png", ".jpg", ".jpeg")
-            is_doc = not is_code_file and (
-                base_name in ("walkthrough.md", "implementation_plan.md", "readme.md") or
-                "/brain/" in normalized or
-                "/docs/" in normalized or
-                normalized.startswith("docs/") or
-                any(normalized.endswith(ext) for ext in whitelist_exts)
+            # Безумовні артефакти життєвого циклу оркестратора (Policy v0.9.3: Правило 2 файлів)
+            is_lifecycle_artifact = (
+                base_name in ("walkthrough.md", "implementation_plan.md") or
+                "/brain/" in normalized
             )
+
+            # Безпечні системні конфігурації та розмітка
+            whitelist_config_exts = (".json", ".yaml", ".yml", ".txt", ".gitignore", ".cfg", ".ini", ".toml", ".log", ".csv", ".tsv", ".sql", ".html", ".css", ".svg", ".png", ".jpg", ".jpeg")
+            is_config_file = any(normalized.endswith(ext) for ext in whitelist_config_exts)
+
+            # Репозиторна проєктна документація (*.md поза /brain/):
+            # Захист від Context Bloat та DIY-копірайтингу (Repository Docs Hygiene Gate v0.9.3)
+            is_repo_doc = not is_code_file and normalized.endswith(".md") and not is_lifecycle_artifact
+            if is_repo_doc:
+                content_len = len(args.get("CodeContent", "")) or len(args.get("ReplacementContent", ""))
+                # Якщо обсяг нового контенту або заміни > 1500 байт — вимагається реєстрація провененсу
+                if content_len > 1500:
+                    ledger_paths = [
+                        "/tmp/antigravity_provenance_ledger.json",
+                        "/home/hills/Documents/.agents/.provenance_ledger.json"
+                    ]
+                    has_doc_entry = False
+                    abs_target = os.path.abspath(target_file)
+                    for lp in ledger_paths:
+                        if os.path.exists(lp):
+                            try:
+                                with open(lp, "r", encoding="utf-8") as lf:
+                                    ledger_data = json.load(lf)
+                                    if abs_target in ledger_data:
+                                        has_doc_entry = True
+                                        break
+                            except Exception:
+                                pass
+                    if not has_doc_entry:
+                        return {
+                            "decision": "deny",
+                            "reason": (
+                                "HARD GATE VIOLATION (Repository Docs Hygiene Gate v0.9.3):\n"
+                                f"Заборонено прямий DIY-синтез великої проєктної документації ({target_file}, {content_len} байт > 1.5 КБ) оркестратором!\n"
+                                "Для захисту контексту від роздуття (Context Bloat) та збереження бюджету дій, великі посібники та шаблони зобов'язані генеруватися моделями ШІ (Tier 1 Ollama або Tier 2 Groq) через:\n"
+                                f"python3 .agents/scripts/diagnostic_runner.py --groq-query \"<ТЗ>\" --out {target_file}\n"
+                                "або вноситися точковими латками (<1.5 КБ) через replace_file_content."
+                            )
+                        }
+
+            is_doc = is_lifecycle_artifact or is_config_file or (is_repo_doc and not is_code_file)
 
             # Автоматичне керування життєвим циклом Фази 4 через ключові артефакти
             if base_name == "implementation_plan.md":
