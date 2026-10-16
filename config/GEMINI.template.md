@@ -1,4 +1,4 @@
-# Antigravity General Execution Policy & Multi-Tier AI Architecture (v0.9.3)
+# Antigravity General Execution Policy & Multi-Tier AI Architecture (v0.9.4)
 
 > [!IMPORTANT]
 > **Нормативне Ядро (Core Kernel):** Обов'язковий регламент розробки. Детальні процедури, ліміти та бенчмарки винесено у сателіт [`docs/knowledge/index/policy_v0.9_reference.md`](file:///home/hills/Documents/docs/knowledge/index/policy_v0.9_reference.md).
@@ -33,7 +33,7 @@
 
 ### Фаза 4: Застосування та звіт по статусу об'єктів (Execution & Status Report)
 - Виконання узгоджених дій через **Git-First Local Access**.
-- **Бюджет кроків Фази 4 (Phase 4 Step Budget):** Ліміт $\le 20$ викликів на ітерацію. При вичерпанні — проміжний звіт у чат.
+- **Динамічний план-контроль та семантичний детектор циклів Фази 4 (Dynamic Plan-Aware Metric & Semantic Loop Gate v0.9.4 / Phase 4 Step Budget):** Замість сліпого лічильника дій впроваджено адаптивний контроль. Динамічний бюджет плану ($A_{\text{max}} = \max(25, 4 \times N_{\text{files}} + 2 \times N_{\text{tests}} + 10)$) формується на основі затвердженого контракту `/tmp/antigravity_phase4_contract.json`. Семантичний детектор циклів ($W=4$) перехоплює зациклення на ідентичних діях на 2-му кроці без спалювання ходів. Контроль відхилення від плану (Plan Divergence Gate) блокує зміни файлів поза контрактом. Оновлення артефактів життєвого циклу (`implementation_plan.md`, `walkthrough.md`) автоматично скидає історію дій та оновлює бюджет без потреби ручного очищення `/tmp`.
 - **Аварійний вимикач (Circuit Breaker):** 2 послідовні збої $\to$ негайний Hard Stop і запит допомоги.
 - **Селективний гейт коду (Selective Code Guard v0.9.1) та гігієна документації (Repository Docs Hygiene Gate v0.9.3):** Жорсткий OS-бар'єр у хуку `pre_tool_hook.py` для інструментів `write_to_file` та `replace_file_content`. Білий список конфігурацій (`*.json`, `*.yaml`, `*.yml`, `*.txt`, `.gitignore`, `.cfg`, `.ini`, `.toml`) редагується без тертя. Безумовними артефактами життєвого циклу оркестратора є виключно **Правило 2 файлів** (`walkthrough.md`, `implementation_plan.md`) та внутрішні артефакти `/brain/`. Репозиторна проєктна документація (`*.md` поза `/brain/`) обсягом $>1500$ байт захищена гейтом і вимагає реєстрації провененсу ШІ (заборона DIY-копірайтингу та роздуття контексту). Контрольовані файли коду (`*.py`, `*.sh`, `*.bash`, `*.ts`, `*.js`, `*.pas`, `*.cpp`, `*.h`, `*.go`) дозволені виключно в `scratch/` або за наявності підтвердженого SHA256 у реєстрі провененсу (`/tmp/antigravity_provenance_ledger.json`). Спроби свавільного DIY-кодингу фізично блокуються з вердиктом Hard Deny.
 - **Візуальний степер побудови коду (Code Lifecycle Stepper):** Поетапне відображення: `[1. Синтез]` ➔ `[2. py_compile AST]` ➔ `[3. SLSA Хеш fcntl.flock]` ➔ `[4. Git Commit]` ➔ `[5. Шлюз Арбітра]`.
@@ -120,6 +120,7 @@
      3. **Git Safety Gate:** Блокує деструктивні Git-операції (`git reset`, `git revert`, `git restore`, `git push`, `git merge`, `git rebase`).
      4. **Selective Code Guard & Repository Docs Hygiene Gate (v0.9.3):** Фізичний OS-гейт для `write_to_file` та `replace_file_content`. Безпечні конфігурації (`*.json`, `*.yaml`, `*.yml`, `.gitignore`) дозволено без перешкод. Безумовний дозвіл для артефактів життєвого циклу діє лише за Правилом 2 файлів (`walkthrough.md`, `implementation_plan.md` + `/brain/`). Для репозиторних `.md` файлів $> 1.5$ КБ прямий DIY-синтез заборонено (потрібна генерація через моделі Tier 1/2 або хірургічні латки <1.5 КБ). Виконувані розширення (`*.py`, `*.sh`, `*.bash`, `*.ts`, `*.js`, `*.pas`, `*.cpp`, `*.h`, `*.go`) дозволені виключно в `scratch/` або за умови реєстрації їхнього SHA256 у реєстрі провененсу ШІ.
      5. **Commit Provenance Gate (v0.9.1):** Блокування комітів із зазначенням `[generated: <model>]`, якщо відсутній відповідний запис у подвійному реєстрі провененсу (/tmp та ~/.agents/).
+     6. **Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4):** OS-бар'єр у `pre_tool_hook.py`, що динамічно валідує ліміт дій за контрактом Фази 2, блокує зациклення дій у ковзному вікні $W=4$ та забороняє мутацію файлів поза санкціонованим списком плану.
 3. **Централізований хаб `Antigravity_Mgr` та Multi-Project Symlink Mesh (v0.9.0):**
    - Консолідація у [`/home/hills/Documents/Antigravity_Mgr/`](file:///home/hills/Documents/Antigravity_Mgr/).
    - **Toolbelt (`Antigravity_Mgr/tools/`):** `phase1_inspect.py`, `phase2_router.py`, `phase4_provenance.py` (реєстр SHA256 у `/tmp/antigravity_provenance_ledger.json`), `phase5_verify.py`.
