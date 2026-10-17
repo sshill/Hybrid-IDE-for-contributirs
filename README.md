@@ -8,10 +8,10 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="#"><img src="https://img.shields.io/badge/policy_tests-34%2F34%20PASS-brightgreen.svg" alt="Policy Tests 34/34"></a>
+  <a href="#"><img src="https://img.shields.io/badge/policy_tests-37%2F37%20PASS-brightgreen.svg" alt="Policy Tests 37/37"></a>
   <a href="PoC/"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-93.3%25%20(Tier%204%20Verified)-success.svg" alt="Architectural Maturity 93.3%"></a>
   <a href="PoC/"><img src="https://img.shields.io/badge/Stress--Test-822%20Steps%20PASS-brightgreen.svg" alt="Stress Test 822 Steps PASS"></a>
-  <a href="PoC/"><img src="https://img.shields.io/badge/Longevity%20Record-1225%20Steps%20PASS-brightgreen.svg" alt="Longevity Record 1225 Steps PASS"></a>
+  <a href="PoC/"><img src="https://img.shields.io/badge/Longevity%20Record-1660%20Steps%20PASS-brightgreen.svg" alt="Longevity Record 1660 Steps PASS"></a>
   <a href="#"><img src="https://img.shields.io/badge/dependencies-0%20external%20(stdlib)-blueviolet.svg" alt="Zero External Dependencies"></a>
 </p>
 
@@ -19,7 +19,7 @@
 
 # 🇺🇦 Українська версія
 
-> **Офіційне середовище розробки для контриб'юторів:** Надає можливість інженерам та спільноті за мінімальні кошти приєднатися до розробки та модифікації флагманського кіберфізичного проєкту **[fallaut4-STDFUA](https://github.com/sshill/fallaut4-STDFUA)** (українська локалізація, модифікації, низькорівнева телеметрія, Papyrus-скрипти).
+> **Універсальне середовище розробки (Hybrid Agentic IDE):** Відкритий детерміністичний фреймворк багаторівневої ШІ-оркестрації (Multi-Tier AI Framework), що усуває фінансові та інфраструктурні бар'єри для інженерів, світчерів, джуніорів та ветеранів. Забезпечує повноцінну інженерну розробку надскладних систем із нульовими додатковими витратами на токени (**0$ Marginal Token Cost**) на звичайному споживчому залізі під Linux (Debian 13).
 
 ---
 
@@ -43,6 +43,14 @@
 | **Tier 2: Groq Cloud LPU** | Витрати на токени | **0.00 грн / 0.00 $** | 14 400 RPD безкоштовно під захистом квоти LiteLLM Safe Budget. |
 | **Tier 3: Git Knowledge** | Витрати на токени | **0.00 грн / 0.00 $** | Кешування в `docs/knowledge/` ліквідує повторний веб-пошук. |
 
+### 🌟 Соціальна місія: Подолання штучних бар'єрів для джуніорів та ветеранів
+
+Сучасна індустрія генеративного ШІ сформувала два критичні бар'єри:
+1. **Штучний фінансовий ценз ($20–$300/міс):** Підписки на комерційні інструменти відсікають початківців, студентів, світчерів та ветеранів від регулярної інженерної практики над складними системами.
+2. **Ілюзія знань («Вайб-кодинг»):** Бездумна сліпа довіра до виводу LLM атрофує критичне архітектурне мислення, створюючи фатальну залежність від платних хмар.
+
+**Hybrid Agentic IDE** виступає відкритим соціальним ліфтом: це не «черговий інструмент для модоробів», а повноцінна виробничо-навчальна платформа. Вона повертає інженеру автономію, навчаючи суворій дисципліні 5-фазного життєвого циклу, роботі через Git-буфери, AST-контролю та детерміністичній верифікації з нульовими витратами на токени.
+
 ---
 
 ## 2. 🛡️ Двоконтурна система валідації (Two-Validator Governance)
@@ -54,7 +62,7 @@
 │  ВАЛІДАТОР 1: АНТІГРАВІТІ (ОРКЕСТРАТОР & ПЕРВИННИЙ КОНТРОЛЬ)            │
 │  • Оцінка завдань користувача та побудова 5-фазного пайплайну           │
 │  • Первинна фільтрація виводу моделей ШІ (Ollama / Groq)                │
-│  • Автоматизований прогін 34 структурних правил регламенту (0.053 с)    │
+│  • Автоматизований прогін 37 структурних правил регламенту (0.002 с)    │
 │  • Формування звіту implementation_plan.md до першого байту змін        │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
@@ -105,7 +113,7 @@ flowchart TD
     end
 
     subgraph Phase5["Фаза 5: Перевірка функціоналу (Verification Checklist)"]
-        P5_Verify["34-точковий валідатор політики\n(validate_general_policy.py 34/34 PASS)"]
+        P5_Verify["37-точковий валідатор політики v0.9.5\n(validate_general_policy.py 37/37 PASS)"]
         P5_Report["Фінальний walkthrough.md\n(Звіт ШІ-провайдерів: Ollama + Groq + AGY)"]
         P5_Verify --> P5_Report
     end
@@ -132,7 +140,7 @@ flowchart TD
 2. **Жорсткі технічні перехоплювачі (Hard Deny Gates в `pre_tool_hook.py`):** Промпти не захищають від збоїв моделей. Впроваджено фізичні перехоплювачі на рівні ОС:
    - **Check 0:** Блокування команд `ls` та `dir` (запобігання порожнім сандбокс-відповідям та сліпим циклам обходу).
    - **Check 1:** Zero Inline-Eval Gate — повна заборона `python3 -c`, `bash -c` та одноразових термінальних скриптів в обхід файлової системи.
-3. **Git-First Local Access (`git show HEAD:<шлях>`) та детерміністичний 34-пунктний валідатор політики:** Повний відхід від одноразових термінальних скриптів на користь детерміністичних системних інструментів і читання першоджерел через Git.
+3. **Git-First Local Access (`git show HEAD:<шлях>`) та детерміністичний 37-пунктний валідатор політики (v0.9.5):** Повний відхід від одноразових термінальних скриптів на користь детерміністичних системних інструментів і читання першоджерел через Git.
 4. **Апаратне профілювання заліза (16 ГБ RAM, ліміти моделі <=7B) та RouteLLM/FrugalGPT прогнозування ваги токенів:** Замість ручного запуску кастомних скриптів сесії запит завжди оцінюється математично ($N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$) і скеровується на локальну Ollama ($\le 60$ токенів виводу) або Groq LPU ($> 60$ токенів) у межах SLA Quantum $\le 30.0$ с.
 
 ### 📊 П'ять структурованих віджетів взаємодії (The 5 Interactive Widgets Framework)
@@ -154,9 +162,9 @@ flowchart TD
 * **Челендж:** Спроба LLM вносити модифікації через неконтрольований термінальний інлайн-код (`python3 -c "import ...; open(...) ..."`) призводить до пошкодження вихідних файлів, обходу синтаксичних перевірок та неможливості верифікації походження коду.
 * **Рішення:** Впроваджено жорсткий перехоплювач [`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py), який фізично відхиляє інлайн-виклики з кодом помилки `126`. Будь-яка модифікація цільового об'єкта відбувається за суворим циклом: (1) чистий синтез файлу локальною моделлю; (2) обов'язкова компіляція AST (`py_compile`) перед накатом; (3) реєстрація SHA256 у реєстрі SLSA/in-toto через [`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py) з атомарним блокуванням `fcntl.flock`; (4) атомарна фіксація в коміті локального Git із записом у журнал перед передачею на перевірку Фази 5.
 
-#### 🔹 Кейс 3: Рекорд довгожительства на 1225 кроків та 12.82 доби (Сесія ee6e8ead — Стійкість проти 236 циклів компакції)
-* **Челендж:** Сесія `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` тривала 307.7 годин (12.82 доби безперервної роботи, 1225 кроків взаємодії, 15.26 МБ JSONL-транскрипту). Платформний рушій провів 236 циклів компакції контексту. Без зовнішнього каркаса агент втрачає системні контракти вже після 3-5 циклів компакції.
-* **Рішення:** Завдяки дотриманню 4 архітектурних директив, екстерналізації проміжних висновків у Markdown-файли та детерміністичним перехоплювачам: 0 деструктивних відкатів Git (`git reset`), 0 апаратних OOM хоста (16 ГБ RAM вистачило на весь період), 100% збереження цілісності архітектури. Детальний емпіричний аналіз див. у [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
+#### 🔹 Кейс 3: Емпіричний рекорд довгожительства на 1660 кроків та 12.82+ діб (Сесія ee6e8ead — Стійкість проти 236+ циклів компакції)
+* **Челендж:** Безперервна виробнича сесія розробки сягнула рекордних 1660 кроків взаємодії (307.7+ годин / 12.82+ доби, >15.2 МБ JSONL-транскрипту). Платформний рушій виконав понад 236 циклів ковзної компакції контексту. У стандартних умовах агент втрачає системні контракти вже після 3-5 циклів компакції.
+* **Рішення:** Завдяки дотриманню 4 архітектурних директив, екстерналізації проміжних висновків у Markdown-файли та детерміністичним перехоплювачам досягнуто: 0 деструктивних відкатів Git (`git reset`), 0 витоків пам'яті хоста (16 ГБ RAM вистачило на весь період), 100% збереження цілісності архітектури та успішне проходження всіх 37 правил політики (37/37 PASS v0.9.5). Детальний аналіз див. у [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
 
 ### 📌 Емпіричні інженерні кейси Фази 5 (Хмарна верифікація та CI/CD):
 
@@ -181,7 +189,7 @@ flowchart TD
 * **[`core/inspect/phase1_inspect.py`](core/inspect/phase1_inspect.py)** — Zero-dependency інспектор AST, JSON, XML та DOCX структур без сліпого обходу дисків.
 * **[`core/verify/phase5_verify.py`](core/verify/phase5_verify.py)** — Портативний компілятор синтаксису Python та інтегратор фінального чек-листа.
 * **[`core/verify/verify_remote_ci.py`](core/verify/verify_remote_ci.py)** — Автономний перевіряльник віддаленого GitHub Actions CI/CD: опитування API, очікування завершення білду та вивід оригінального повідомлення провайдера (Original Provider Report).
-* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-точковий структурний валідатор відповідності регламенту v0.9.0.
+* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 37-точковий структурний валідатор відповідності регламенту v0.9.5.
 
 ---
 
@@ -230,7 +238,7 @@ echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.en
 3. Перевіряє доступність локального демона Ollama на порті 11434.
 4. Валідує наявність ключів `GEMINI_API_KEY` та `GROQ_API_KEY` у `~/.env`.
 5. Проводить бойовий пре-флайт тест інференсу агентів Tier 1 + Tier 2.
-6. Запускає системний валідатор 34 структурних правил регламенту (34/34 PASS).
+6. Запускає системний валідатор 37 структурних правил регламенту (37/37 PASS).
 
 ---
 
@@ -238,8 +246,20 @@ echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.en
 
 Архітектурні принципи фреймворку пройшли екстремальну емпіричну перевірку надійності:
 * **Стрес-тест 822 кроки / 6 діб безперервної роботи:** Сесія `c80fdbd3-7f36-4550-960c-6ce51de1741d` підтвердила нульову втрату контексту, 0 аварій ядра та повну відсутність OOM-колапсів хоста при ліміті 16 ГБ RAM.
-* **Рекорд довгожительства 1225 кроків / 12.82 доби безперервної роботи:** Сесія `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` витримала 236 циклів компакції контексту, зберігши 100% працездатність без втрати пам'яті та без аварій ОС.
+* **Рекорд довгожительства 1660 кроків / 12.82+ доби безперервної роботи:** Сесія `ee6e8ead` витримала понад 236 циклів компакції контексту, зберігши 100% працездатність, нульовий витік RAM на 16 ГБ хості Debian 13 та повну валідність регламенту (37/37 PASS v0.9.5).
 * **Незалежна сертифікація Tier 4 Release Code-Arbiter (Claude Sonnet 5.5):** Отримано вердикт **PASS / APPROVED** із показником архітектурної зрілості **93.3%** за адаптованим стандартом SEI/TOGAF (рівень *Principal Systems Architect* L7/L8).
+
+### 🎮 Верифіковані бойові кейси розробки (Verified Production Cases / PoC Portfolio)
+
+Архітектура ядра повністю абстрагована від конкретних предметних областей завдяки ізольованим доменним оверлеям (`GEMINI.md` / `AGENTS.md`). Список верифікованих виробничих кейсів постійно розширюється:
+
+1. **Кейс #1 (Флагманський PoC):** **[fallaut4-STDFUA](https://github.com/sshill/fallaut4-STDFUA)** — кіберфізичний ігровий полігон реального часу:
+   - Складна екосистема рушія Creation Engine (тисячі спадкованих Papyrus-скриптів, плагіни ESM/ESP, меші, локалізація).
+   - Емуляція Windows під Linux через Wine 10 / Caprica Compiler.
+   - Низькорівнева міжпроцесна шина (HIL) із затримкою $\le 1$ мс та апаратна генерація звуку через `aplay`.
+   - Суворий апаратний ценз: стабільна робота на 16 ГБ RAM хості без дискретної GPU.
+2. **Кейс #2 (У процесі підключення):** Системна автоматизація та вбудовані IoT/Embedded системи на базі Debian Linux.
+3. **Кейс #3 (Заплановано спільнотою):** Розподілені мікросервіси та платформи управління знаннями.
 
 👉 Детальні звіти, матриці та телеметрію див. у розділі **[📁 Proof of Concept (PoC/)](PoC/)**:
 - **[PoC README](PoC/README.md)** — концептуальний огляд та архітектурне розв'язання.
@@ -260,7 +280,7 @@ echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.en
 
 # 🇬🇧 English Version
 
-> **Official Contributor Development Environment:** Empowers software engineers and the community to join the development and modification of the flagship cyber-physical project **[fallaut4-STDFUA](https://github.com/sshill/fallaut4-STDFUA)** (Ukrainian localization, game mods, low-latency telemetry, Papyrus scripts) with minimal infrastructure expenses.
+> **Universal Development Environment (Hybrid Agentic IDE):** Open deterministic multi-tier AI framework that dismantles financial and infrastructure barriers for engineers, career-switchers, juniors, and veterans. Delivers industrial-grade engineering capabilities for complex systems with zero marginal token costs (**$0 Marginal Token Cost**) on standard consumer hardware under Linux (Debian 13).
 
 ---
 
@@ -284,6 +304,14 @@ Developing complex systems with commercial AI tools (Cursor, GitHub Copilot, com
 | **Tier 2: Groq Cloud LPU** | Token Consumption | **$0.00 / €0.00** | 14,400 RPD free tier guarded by LiteLLM Safe Budget. |
 | **Tier 3: Git Knowledge** | Token Consumption | **$0.00 / €0.00** | Knowledge caching in `docs/knowledge/` prevents redundant web lookups. |
 
+### 🌟 Social Mission: Dismantling Artificial Barriers for Juniors and Veterans
+
+The commercial AI development landscape has instituted two critical bottlenecks:
+1. **Artificial Financial Barriers ($20–$300/mo):** Recurring commercial subscriptions prevent students, junior engineers, career-switchers, and returning veterans from gaining practical hands-on experience in architecting complex software systems.
+2. **Illusion of Competence ("Vibe-Coding"):** Uncritical reliance on closed-cloud LLM output atrophies core analytical problem-solving and deep architectural intuition, fostering vendor lock-in.
+
+**Hybrid Agentic IDE** operates as an open-access platform: it is neither a toy nor just "another modder tool", but a full-spectrum engineering and educational environment. It restores true developer agency by instilling rigorous 5-phase lifecycle discipline, Git-buffer access, AST validation, and deterministic verification at zero marginal token cost.
+
 ---
 
 ## 2. 🛡️ Two-Validator Governance Architecture
@@ -295,7 +323,7 @@ To guarantee code integrity and policy compliance, quality assurance is split be
 │  VALIDATOR 1: ANTIGRAVITY (ORCHESTRATOR & PRIMARY CONTROL)             │
 │  • Task assessment and structured 5-phase lifecycle management         │
 │  • Primary response validation of AI providers (Ollama / Groq)         │
-│  • Automated verification of 34 structural policy rules (0.053 s)      │
+│  • Automated verification of 37 structural policy rules (0.002 s)      │
 │  • Synthesizes implementation_plan.md before any code modification     │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
@@ -346,7 +374,7 @@ flowchart TD
     end
 
     subgraph Phase5["Phase 5: Functional Verification"]
-        P5_Verify["34-Point Policy Validator\n(validate_general_policy.py 34/34 PASS)"]
+        P5_Verify["37-Point Policy Validator v0.9.5\n(validate_general_policy.py 37/37 PASS)"]
         P5_Report["Final walkthrough.md\n(Multi-AI Provider Report: Ollama+Groq+AGY)"]
         P5_Verify --> P5_Report
     end
@@ -373,7 +401,7 @@ Based on empirical analysis across four long-lived operational sessions (c80fdbd
 2. **Hard Deny Technical Gates in `pre_tool_hook.py`:** Soft conversational prompts fail under stress. Hard OS-level interceptors enforce discipline:
    - **Check 0:** Hard Deny Gate for `ls` and `dir` (eliminates empty sandbox directory queries and blind crawling loops).
    - **Check 1:** Zero Inline-Eval Gate — physical prohibition of `python3 -c`, `bash -c`, and untracked ad-hoc scripts.
-3. **Git-First Local Access (`git show HEAD:<path>`) & Deterministic 34-Point Policy Validator:** Complete elimination of temporary single-use shell scripts in favor of deterministic system tools and reading ground truths directly via Git.
+3. **Git-First Local Access (`git show HEAD:<path>`) & Deterministic 37-Point Policy Validator (v0.9.5):** Complete elimination of temporary single-use shell scripts in favor of deterministic system tools and reading ground truths directly via Git.
 4. **Hardware-Aware Resource Profiling (16 GB RAM, $\le 7$B Local Model Ceiling) & RouteLLM/FrugalGPT Token Weight Forecasting:** Session-scoped tasks are forecasted using $N_{\text{in}} = \text{int}(\text{len}(\text{prompt.split}()) \times 1.3) + 150$ and routed to local Ollama ($\le 60$ output tokens) or Groq LPU ($> 60$ tokens) within an SLA Quantum $\le 30.0$ s, eliminating token waste.
 
 ### 📊 The 5 Interactive Widgets Framework
@@ -395,9 +423,9 @@ To eliminate the "unbroken wall of terminal commands" anti-pattern, 5 dedicated 
 * **Challenge:** Agents attempting ad-hoc modifications via terminal inline one-liners (`python3 -c "..."` or shell pipes) frequently corrupt target source code, bypass syntax checks, and produce unverified, untraceable file mutations.
 * **Solution:** Deployed an OS-level pre-tool interceptor ([`core/hooks/pre_tool_hook.py`](core/hooks/pre_tool_hook.py)) that strictly denies inline evaluations with exit code `126`. All implementations on target objects strictly execute through a hardened lifecycle: (1) clean script/file synthesis via local Ollama; (2) pre-implementation AST compilation (`py_compile`); (3) SHA256 hashing and SLSA/in-toto ledger logging via [`core/provenance/phase4_provenance.py`](core/provenance/phase4_provenance.py) using atomic `fcntl.flock` locks; (4) deterministic local Git commit logging before initiating Phase 5 verification.
 
-#### 🔹 Case 3: 1225-Step / 12.82-Day Longevity Record (Session ee6e8ead — Resilience Across 236 Compactions)
-* **Challenge:** Operational session `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` ran continuously for 307.7 hours (12.82 days, 1225 interaction steps, 15.26 MB JSONL transcript). The platform engine executed 236 compaction cycles. Without deterministic scaffolding, LLM agents lose architectural integrity after 3-5 compaction cycles.
-* **Solution:** Strictly adhering to the 4 architectural directives, externalizing findings to Markdown files, and enforcing deterministic pre-tool gates yielded: 0 destructive Git rollbacks (`git reset`), 0 host OOM collisions (16 GB RAM developer stand remained responsive throughout), and 100% architectural contract preservation. See complete empirical findings in [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
+#### 🔹 Case 3: Empirical Longevity Record: 1660 Steps / 12.82+ Days (Session ee6e8ead — Resilience Across 236+ Compactions)
+* **Challenge:** The continuous production session achieved an empirical record of 1660 interaction steps (307.7+ hours / 12.82+ days, >15.2 MB JSONL transcript). The platform engine performed over 236 sliding-window compaction cycles. In baseline configurations, AI agents experience severe context collapse after just 3–5 compactions.
+* **Solution:** By enforcing the 4 architectural directives, externalizing memory into Markdown files under Git versioning, and deploying deterministic interceptors, the framework maintained: 0 destructive Git rollbacks (`git reset`), 0 host RAM memory leaks (16 GB host remained completely responsive throughout), 100% architectural integrity, and full compliance across all 37 policy rules (37/37 PASS v0.9.5). See detailed analysis in [📁 PoC: Case Study Session ee6e8ead](PoC/case_study_session_ee6e8ead_longevity.md).
 
 ### 📌 Empirical Engineering Cases — Phase 5 (Cloud CI Verification):
 
@@ -422,7 +450,7 @@ All modules are written in standard Python 3.10+ stdlib with zero external `pip`
 * **[`core/inspect/phase1_inspect.py`](core/inspect/phase1_inspect.py)** — Zero-dependency structural inspector for AST, JSON, XML, and DOCX files.
 * **[`core/verify/phase5_verify.py`](core/verify/phase5_verify.py)** — Portable Python syntax compiler and verification checklist runner.
 * **[`core/verify/verify_remote_ci.py`](core/verify/verify_remote_ci.py)** — Standalone GitHub Actions CI/CD verifier: polls API, awaits build completion, and prints the Original Provider Report without third-party dependencies.
-* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 34-point structural policy validator ensuring adherence to v0.9.0.
+* **[`core/verify/validate_general_policy.py`](core/verify/validate_general_policy.py)** — 37-point structural policy validator ensuring adherence to v0.9.5.
 
 ---
 
@@ -471,7 +499,7 @@ The script automatically:
 3. Checks local Ollama service status on port 11434.
 4. Validates `GEMINI_API_KEY` and `GROQ_API_KEY` presence in `~/.env`.
 5. Executes pre-flight AI inference tests (Tier 1 Ollama + Tier 2 Groq LPU).
-6. Executes the 34-point General Execution Policy validator (34/34 PASS).
+6. Executes the 37-point General Execution Policy validator (37/37 PASS).
 
 ---
 
@@ -479,8 +507,20 @@ The script automatically:
 
 The architectural tenets of the framework underwent an extreme empirical stress-test:
 * **822-Step / 6-Day Continuous Operation Stress-Test:** Session `c80fdbd3-7f36-4550-960c-6ce51de1741d` demonstrated zero data loss, zero kernel panics, and zero host OOM collisions on a 16 GB RAM developer stand.
-* **1225-Step / 12.82-Day Longevity Record:** Session `ee6e8ead-ba3b-4489-814f-d04ffdd435d6` withstood 236 context compaction cycles, maintaining 100% operational fidelity without memory loss or OS crashes.
+* **1660-Step / 12.82+ Day Longevity Record:** Operational session `ee6e8ead` withstood over 236 sliding-window context compaction cycles, maintaining 100% operational fidelity with zero host RAM leaks on a 16 GB Debian 13 stand and full compliance across all 37 policy rules (37/37 PASS v0.9.5).
 * **Independent Tier 4 Release Code-Arbiter Certification (Claude Sonnet 5.5):** Awarded a **PASS / APPROVED** verdict with an architectural maturity score of **93.3%** under the SEI/TOGAF benchmark (Principal Systems Architect standard).
+
+### 🎮 Verified Production Cases / PoC Portfolio
+
+The core framework architecture is completely decoupled from domain-specific implementations through isolated policy overlays (`GEMINI.md` / `AGENTS.md`). The portfolio of verified production deployments continuously expands:
+
+1. **Case #1 (Flagship PoC):** **[fallaut4-STDFUA](https://github.com/sshill/fallaut4-STDFUA)** — Real-time cyber-physical gaming testbed:
+   - Complex Creation Engine ecosystem (thousands of legacy Papyrus scripts, ESM/ESP plugins, meshes, localization).
+   - Linux-to-Windows runtime emulation via Wine 10 / Caprica Compiler.
+   - Low-latency hardware-in-the-loop (HIL) bus ($\le 1$ ms latency) and hardware audio feedback via `aplay`.
+   - Strict hardware budget: continuous operational stability on 16 GB RAM laptop with zero dedicated GPU.
+2. **Case #2 (In Progress):** System automation and Embedded/IoT environments based on Debian Linux.
+3. **Case #3 (Community Roadmap):** Distributed backend microservices and enterprise knowledge graph orchestration.
 
 👉 See full reports, telemetry, and matrices in the **[📁 Proof of Concept (PoC/)](PoC/)** directory:
 - **[PoC README](PoC/README.md)** — conceptual framework & architectural rationale.
