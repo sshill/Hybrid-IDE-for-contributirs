@@ -32,7 +32,7 @@ description: >-
 3. **Генерація канонічного Bridge Prompt:**
    Вивести в чат готовий для копіювання блок markdown такого змісту:
 
-```markdown
+````markdown
 # 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.6)
 
 ## 1. Метадані стану та середовища
@@ -60,10 +60,10 @@ description: >-
    `python3 core/engine/diagnostic_runner.py --ollama-query "Ping: confirm status in 5 words" --model qwen2.5-coder:1.5b`
 2. **Tier 2 (Cloud Fallback Hub Groq LPU):**
    `python3 core/engine/diagnostic_runner.py --groq-query "Ping: confirm status in 5 words"`
-3. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter):**
-   `copilot --version`
-4. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
+3. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
    Сформувати підтвердження готовності Шлюзу 4.1 до аудиту сигнатур та контрактів.
+4. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter Probe):**
+   `copilot --version` (перевірка зв'язку та готовності CLI; запуск prompt `-p` потребує схвалення `+`).
 
 ### 🛑 Крок 3: Лог інтеграції плагіна та доменного оверлею
 Сформувати та вивести структурований звіт:
@@ -82,11 +82,11 @@ description: >-
   - Заборони:       Zero Inline-Eval, Git & Index First, Step Budget
 
 [Step 3: Domain Overlay Resolution]
-  - Файл оверлею:   <project_root>/AGENTS.md (< 1.5 КБ)
+  - Файл оверлею:   <project_root>/AGENTS.md
   - Специфікація:   Шлюз 4.1 (Sonnet), Pre-Release Gate (Copilot CLI)
 
 [Step 4: Decoupling & Binding Verdict]
-  - Статус GEMINI:  🚫 Вичищено (0 посилань на старий моноліт)
+  - Статус GEMINI:  🚫 Декупловано з підпроєктів (fallaut/ та contributors вичищено)
   - Вердикт:        ✅ Ядро та доменний оверлей успішно зв'язано
 ======================================================================
 ```
@@ -96,4 +96,4 @@ description: >-
 
 > [!CAUTION]
 > Доки Кроки 1–3 не виконано на 100% (PASS) з публікацією віджетів інференсу для всіх провайдерів, агенту категорично заборонено змінювати бойовий код!
-```
+````

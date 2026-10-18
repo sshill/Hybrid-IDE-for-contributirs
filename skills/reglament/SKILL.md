@@ -46,10 +46,10 @@ description: >-
    `python3 core/engine/diagnostic_runner.py --ollama-query "Ping: confirm status in 5 words" --model qwen2.5-coder:1.5b`
 2. **Tier 2 (Cloud Fallback Hub Groq LPU):**
    `python3 core/engine/diagnostic_runner.py --groq-query "Ping: confirm status in 5 words"`
-3. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter):**
-   `copilot --version`
-4. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
-   Сформувати вердикт готовності Шлюзу 4.1 до аудиту контрактів, сигнатур API та повного сетапу файлів.
+3. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
+   Сформувати вердикт готовності Шлюзу 4.1 до аудиту контрактів, сигнатур API та базового сетапу файлів.
+4. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter Probe):**
+   `copilot --version` (перевірка зв'язку та готовності CLI; запуск prompt `-p` потребує схвалення `+`).
 
 *Обов'язково вивести віджети `[AI Invocation Event]` для всіх активних провайдерів у чат!*
 
@@ -73,13 +73,12 @@ description: >-
 
 [Step 3: Domain Overlay Resolution]
   - Файл оверлею:   <workspace_root>/AGENTS.md
-  - Розмір:         < 1.5 КБ (Repository Docs Hygiene Gate: PASS)
   - Доменні норми:  Специфікація стеку, правила Шлюзу 4.1 (Sonnet), Pre-Release Gate (Copilot CLI)
 
 [Step 4: Decoupling & Binding Verdict]
-  - Статус GEMINI:  🚫 Повністю вичищено (0 посилань на старий моноліт 20 КБ)
+  - Статус GEMINI:  🚫 Декупловано з підпроєктів (fallaut/ та contributors вичищено)
   - Колізії хуків:  🟢 Локальні .agents/hooks.json деактивовано ({})
-  - Валідатор:      37/37 структурних перевірок пройдено (core/verify/validate_general_policy.py)
+  - Валідатор:      37/37 перевірок пройдено (core/verify/phase5_verify.py)
   - Вердикт:        ✅ Ядро та доменний оверлей успішно зв'язано в активний контекст
 ======================================================================
 ```
