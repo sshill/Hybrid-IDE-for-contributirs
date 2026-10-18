@@ -2,62 +2,98 @@
 name: bridge
 description: >-
   Generates a canonical Bridge Prompt to transition context to a new chat
-  upon context exhaustion or milestone completion. Invoked as /bridge [version].
-  By default (no argument), dynamically activates the latest settings and active
-  policy version (v0.9.0+). If a version is explicitly specified after a space
-  (e.g. /bridge v0.8, /bridge v0.6), targets that specific version.
+  under Hybrid IDE policy v0.9.6, enforcing the mandatory 4-Tier AI Battle Test,
+  structured Plugin & Overlay Integration Log, and domain overlay AGENTS.md binding.
+  Invoked as /bridge [version].
 ---
 
-# Bridge Prompt Generator (Dynamic Latest Settings / Explicit Version)
+# 🌉 Bridge Prompt Generator (Hybrid IDE Policy v0.9.6)
 
-Use this skill whenever the user types `/bridge` (with or without arguments) or asks to generate a bridge prompt to transition context to a new session without losing state, without hallucinations, and without re-scanning files.
+Використовуйте цю навичку щоразу, коли користувач вводить `/bridge` (з версією або без), при вичерпанні контексту або для безшовного переходу в нову сесію без втрати прогресу, галюцинацій та повторного сканування кодової бази.
 
-## Command Syntax & Argument Resolution
+## Синтаксис виклику та версії
 
 - **`/bridge` (без аргументу):**
-  Автоматично визначає та застосовує **найновіші активні налаштування**.
-  Динамічно зчитує поточну активну гілку Git (`git branch --show-current`) та найсвіжіший маніфест знань у `Antigravity_Mgr/artifacts/policy_v0.9_manifest.json` або `docs/knowledge/index/policy_v0.9_manifest.json` (регламент v0.9.0).
-- **`/bridge <версія>` (з аргументом через пробіл, наприклад `/bridge v0.8` або `/bridge v0.7`):**
-  Активує та генерує міст суворо під зазначену версію політики з відповідного маніфесту (наприклад, `policy_v0.8_manifest.json`).
+  Автоматично застосовує актуальний Регламент **`v0.9.6`** та доменні оверлеї `AGENTS.md`.
+- **`/bridge <версія>` (наприклад `/bridge v0.9.5`, `/bridge v0.8`):**
+  Активує цільову версію відповідно до архівних маніфестів.
 
-## Instructions for the Agent
+---
 
-When this skill is triggered:
-1. **Argument Parsing & Resolution:**
-   - Перевірити вхідний рядок виклику.
-   - Якщо вказано версію через пробіл (наприклад, `v0.8`, `v0.7`): обрати цю версію як цільову.
-   - Якщо версію не вказано: за замовчуванням обрати найновішу активну версію системи (наразі `v0.9.0` / активна гілка `v0.8` або `v0.9`).
-2. **Quick Git Snapshot (Git First & Pure Command Shapes):**
-   Run strictly as separate single commands:
-   `git status -sb`
-   `git log -n 3 --oneline`
-   (Do NOT use `&&`, `||`, pipes `|`, or raw crawlers `view_file`/`list_dir`).
-3. **Collect Active State & Manifests:**
-   - Active branch and latest commit hash.
-   - **Dynamic Session Lineage Resolution:** Перевірити наявність `Antigravity_Mgr/artifacts/session_state.json` або `Antigravity_Mgr/artifacts/walkthrough.md`.
-     * **За замовчуванням (General Projects):** Базовим робочим каталогом для загальних проєктів (дослідження, CSIS, UWE, політика `GEMINI.md`, системний тулбелт) є кореневий простір хоста: `/home/hills/Documents` (гілка `v0.8` / `main`).
-     * **Підпроєкти (Sub-projects / Overlays):** Нові або існуючі підпроєкти підключаються до власного Git суто із зазначенням папки в ярлику проєкту. Чати у відповідному проєкті суворо використовують саме цей каталог (наприклад, `/home/hills/Documents/Hybrid-IDE-for-contributors` або `/home/hills/Documents/fallaut`). У такому разі `/bridge` автоматично закріплює каталог цього проєкту та його власний Git як `Lineage Target` для спадкоємців сесії.
-   - Latest `walkthrough.md` location in `Antigravity_Mgr/artifacts/`.
-   - Manifest corresponding to the resolved version (`policy_v0.9_manifest.json` v0.9.0).
-4. **Generate Canonical Bridge Prompt:**
-   Output immediately a ready-to-copy markdown block following this strict structure:
-   - **Перший рядок (Recommended Directive Title):** Чітка, однозначна назва без двозначностей та простору для галюцинацій:
-     `# 🌉 Регламентний старт: Аудит зв'язку з ШІ-агентами, статус Git та засвоєння контексту v0.9.0`
-   - **1. Метадані стану та середовища:** Версія v0.9.0, Parent Conversation ID, маніфест, стан гілок, а також динамічно підставлені параметри цільового робочого простору (за замовчуванням для загальних робіт — кореневий каталог `/home/hills/Documents`).
-   - **2. Імперативний поетапний протокол (Strict Step-by-Step Gate):**
-     - **Крок 1 (Обов'язковий старт — ШІ-агенти та Git):**
-       1. Вивести Phase 1 Status Banner.
-       2. Перевірити середовище та сервіси:  
-          `python3 .agents/scripts/diagnostic_runner.py --check-all` (`BypassSandbox: true`).
-       3. **Комплексний бойовий тест інференсу агентів (Tier 1 Ollama + Tier 2 Groq):**  
-          `python3 .agents/scripts/diagnostic_runner.py --check-agents` (`BypassSandbox: true`).
-       4. Перевірити Git (окремими одиночними викликами):  
-          `git status`  
-          `git log -n 3 --oneline`
-     - **Обов'язкова видимість віджетів ШІ на екрані:** Отримані віджети `[AI Invocation Event]` (для Local Ollama та Groq Cloud LPU) агент **зобов'язаний обов'язково процитувати безпосередньо у фінальне видиме повідомлення чату**, щоб користувач бачив їх на екрані, а не всередині згорнутих логів інструментів.
-     - **Залізна заборона (Domain & Script Lock):** Доки Крок 1 не пройдено на 100% (PASS) з публікацією віджетів інференсу для обох провайдерів, агенту **категорично заборонено** чіпати прикладні скрипти Fallout 4, білдери чи будь-який бізнес-код!
-     - **Правило одиночних команд (Zero Friction Command Shapes):** Категорично заборонено поєднувати команди через `&&`, `||`, `|`, `$()`. Тільки чисті префіксні одиночні виклики для гарантії автосхвалення без модальних вікон.
-     - **Крок 2 (Лише після успіху Кроку 1):** Зчитати висновки попередника з `Antigravity_Mgr/artifacts/walkthrough.md` і перейти до роботи з прикладним кодом за 5-фазним регламентом.
-5. **Stop Execution:**
-   Do not run secondary tools. Yield immediately to the user with the generated prompt.
+## Інструкції для агента при виклику `/bridge`
 
+1. **Збір оперативного стану (Git & Surface First):**
+   Виконати окремими чистими командами (`BypassSandbox: true`):
+   - `git status -sb`
+   - `git log -n 3 --oneline`
+2. **Визначення цільового робочого простору (`Lineage Target`):**
+   - Зафіксувати поточний активний каталог (наприклад, `/home/hills/Documents/Hybrid-IDE-for-contributors` або `/home/hills/Documents/fallaut`).
+   - Знайти найсвіжіший артефакт `walkthrough.md`.
+3. **Генерація канонічного Bridge Prompt:**
+   Вивести в чат готовий для копіювання блок markdown такого змісту:
+
+```markdown
+# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.6)
+
+## 1. Метадані стану та середовища
+- **Версія Регламенту:** `v0.9.6` (Global Plugin Architecture & Domain Overlays)
+- **Домен:** `<Назва домену>` (`<Повний шлях до робочого простору>`)
+- **Parent Conversation ID:** `<Поточний Conversation ID>`
+- **Active Git Branch:** `<Поточна гілка>` (коміт `<HEAD Commit SHA>`)
+- **Чинне Конституційне ядро:** `~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md`
+- **Доменний оверлей проєкту:** `<project_root>/AGENTS.md` (всі файли `GEMINI.md` утилізовано)
+- **Попередній Walkthrough:** [`walkthrough.md`](file://<шлях_до_walkthrough.md>)
+
+---
+
+## 2. Імперативний стартовий протокол (Strict Step-by-Step Gate)
+
+### 🛑 Крок 1: Phase 1 Status Banner
+Вивести обов'язковий банер:
+`🎯 [DOMAIN: <Домен> | HOST: Linux/Debian]`
+`🟢 [CONTEXT: Оптимальний | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
+
+### 🛑 Крок 2: Бойова перевірка ВСІХ 4 рівнів ШІ-матриці
+Виконати окремими одиночними викликами (`BypassSandbox: true`) та вивести стандартизовані віджети `[AI Invocation Event]` для кожного провайдера:
+
+1. **Tier 1 (Local Edge Ollama):**
+   `python3 core/engine/diagnostic_runner.py --ollama-query "Ping: confirm status in 5 words" --model qwen2.5-coder:1.5b`
+2. **Tier 2 (Cloud Fallback Hub Groq LPU):**
+   `python3 core/engine/diagnostic_runner.py --groq-query "Ping: confirm status in 5 words"`
+3. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter):**
+   `copilot --version`
+4. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
+   Сформувати підтвердження готовності Шлюзу 4.1 до аудиту сигнатур та контрактів.
+
+### 🛑 Крок 3: Лог інтеграції плагіна та доменного оверлею
+Сформувати та вивести структурований звіт:
+```text
+======================================================================
+📦 [PLUGIN & OVERLAY INTEGRATION LOG]
+======================================================================
+[Step 1: Global Plugin Discovery]
+  - Шлях плагіна:   ~/.gemini/config/plugins/hybrid-ide/
+  - Маніфест:       plugin.json (v1.0.0)
+  - Хуки безпеки:   hooks.json (PreToolUse, PostToolUse, Stop)
+  - Статус хуків:   🟢 Активно
+
+[Step 2: Constitutional Kernel Audit]
+  - Файл ядра:      rules/AGENTS.md (3.7 КБ)
+  - Заборони:       Zero Inline-Eval, Git & Index First, Step Budget
+
+[Step 3: Domain Overlay Resolution]
+  - Файл оверлею:   <project_root>/AGENTS.md (< 1.5 КБ)
+  - Специфікація:   Шлюз 4.1 (Sonnet), Pre-Release Gate (Copilot CLI)
+
+[Step 4: Decoupling & Binding Verdict]
+  - Статус GEMINI:  🚫 Вичищено (0 посилань на старий моноліт)
+  - Вердикт:        ✅ Ядро та доменний оверлей успішно зв'язано
+======================================================================
+```
+
+### 🛑 Крок 4: Стан Git та перехід до Фази 1
+Перевірити `git status -sb` та `git log -n 3 --oneline`. Зчитати попередній `walkthrough.md` та перейти до виконання завдань за 5-фазним регламентом.
+
+> [!CAUTION]
+> Доки Кроки 1–3 не виконано на 100% (PASS) з публікацією віджетів інференсу для всіх провайдерів, агенту категорично заборонено змінювати бойовий код!
+```
