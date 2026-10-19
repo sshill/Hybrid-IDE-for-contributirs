@@ -48,10 +48,11 @@ description: >-
 
 ## 2. Імперативний стартовий протокол (Strict Step-by-Step Gate)
 
-### 🛑 Крок 1: Phase 1 Status Banner
-Вивести обов'язковий банер:
+### 🛑 Крок 1: Phase 1 Status Banner та 2D-телеметрія контексту
+Виконати динамічний вимір метрик (`core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
 `🎯 [DOMAIN: <Домен> | HOST: Linux/Debian]`
-`🟢 [CONTEXT: Оптимальний | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
+`<Індикатор 🟢/🟡/🔴> [CONTEXT: <S> кроків (~<tok>k tok) | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
+*(Обов'язково вивести віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у чат!)*
 
 ### 🛑 Крок 2: Бойова перевірка ВСІХ 4 рівнів ШІ-матриці
 Виконати окремими одиночними викликами (`BypassSandbox: true`) та вивести стандартизовані віджети `[AI Invocation Event]` для кожного провайдера:

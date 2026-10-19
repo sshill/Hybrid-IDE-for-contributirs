@@ -167,16 +167,109 @@ def inspect_json(file_path: str) -> int:
         print(f"❌ Помилка читання JSON: {e}", file=sys.stderr)
         return 2
 
+def inspect_telemetry(session_query: str = "") -> int:
+    """Динамічний 2D-аналіз контексту сесії: кроки, розмір транскрипту, токени Nin/Nout та статус компакції."""
+    brain_base = "/home/hills/.gemini/antigravity/brain"
+    target_dir = ""
+
+    if session_query and session_query != "current":
+        if os.path.isabs(session_query) and os.path.isdir(session_query):
+            target_dir = session_query
+        else:
+            cand = os.path.join(brain_base, session_query)
+            if os.path.isdir(cand):
+                target_dir = cand
+            else:
+                matches = [p for p in os.listdir(brain_base) if session_query in p]
+                if matches:
+                    target_dir = os.path.join(brain_base, matches[0])
+
+    if not target_dir and os.path.exists(brain_base):
+        dirs = [os.path.join(brain_base, d) for d in os.listdir(brain_base) if os.path.isdir(os.path.join(brain_base, d))]
+        if dirs:
+            dirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            target_dir = dirs[0]
+
+    if not target_dir or not os.path.exists(target_dir):
+        print("❌ Не вдалося знайти активну сесію для зняття телеметрії.", file=sys.stderr)
+        return 1
+
+    log_file = os.path.join(target_dir, ".system_generated", "logs", "transcript.jsonl")
+    if not os.path.exists(log_file):
+        print(f"❌ Файл транскрипту не знайдено: {log_file}", file=sys.stderr)
+        return 1
+
+    steps_count = 0
+    file_bytes = os.path.getsize(log_file)
+    last_user_len = 0
+    last_model_len = 0
+    has_summary = False
+
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                steps_count += 1
+                try:
+                    data = json.loads(line)
+                    t_type = data.get("type", "")
+                    content = str(data.get("content", ""))
+                    if "<CONTEXT_SUMMARY>" in content:
+                        has_summary = True
+                    if t_type == "USER_INPUT":
+                        last_user_len = len(content)
+                    elif t_type in ("PLANNER_RESPONSE", "MODEL"):
+                        last_model_len = len(content)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"❌ Помилка читання транскрипту: {e}", file=sys.stderr)
+        return 2
+
+    # Оцінка токенів (1 токен ≈ 4 символи)
+    est_cumulative_tokens = file_bytes // 4
+    est_nin = max(350, (last_user_len // 4) + 1200)
+    est_nout = max(150, last_model_len // 4)
+
+    if steps_count > 800 or est_cumulative_tokens > 160000 or has_summary:
+        zone = "🔴 ЗОНА 3: ГЛИБОКА СЕСІЯ"
+        action = "Вичерпання лімітів! Обов'язкова фіксація в Git та перехід на /bridge."
+    elif steps_count > 600 or est_nin > 3000 or est_cumulative_tokens > 80000:
+        zone = "🟡 ЗОНА 2: НАСИЧЕНА"
+        action = "Підвищена щільність! Пріоритет локальних Git-комітів, лаконічність звітів."
+    else:
+        zone = "🟢 ЗОНА 1: ОПТИМАЛЬНА"
+        action = "Штатна робота за 5-фазним регламентом."
+
+    session_id = os.path.basename(target_dir)
+    print("┌────────────────────────────────────────────────────────────────────────┐")
+    print("│ 📊 [CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]                      │")
+    print("├────────────────────────────────────────────────────────────────────────┤")
+    print(f"│ • Сесія / ID         : {session_id[:16]}... ({session_id})")
+    print(f"│ • Індикатор / Зона   : {zone}")
+    print(f"│ • Кроки сесії (S)    : {steps_count} / 800 кроків")
+    print(f"│ • Обсяг транскрипту  : {file_bytes / (1024*1024):.2f} MB (~{est_cumulative_tokens // 1000}k tok)")
+    print(f"│ • Останній запит     : Nin: ~{est_nin} tok | Nout: ~{est_nout} tok")
+    print(f"│ • Контекст-компакція : {'⚠️ Активовано (<CONTEXT_SUMMARY>)' if has_summary else '🟢 Норма (без стиснення)'}")
+    print(f"│ • Рекомендація       : {action}")
+    print("└────────────────────────────────────────────────────────────────────────┘")
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(description="Phase 1 Zero-Dep Format & AST Inspector (Antigravity_Mgr)")
     parser.add_argument("--ast", type=str, help="Аналіз Python AST файлу")
     parser.add_argument("--docx", type=str, help="Інспекція .docx документа та коментарів")
     parser.add_argument("--xml", type=str, help="Безпечна інспекція .xml файлу")
     parser.add_argument("--json", type=str, help="Структурна інспекція .json файлу")
+    parser.add_argument("--telemetry", nargs="?", const="current", default=None, help="Динамічна телеметрія контексту сесії (кроки, токени Nin/Nout)")
 
     args = parser.parse_args()
 
-    if args.ast:
+    if args.telemetry is not None:
+        return inspect_telemetry(args.telemetry)
+    elif args.ast:
         return inspect_ast(args.ast)
     elif args.docx:
         return inspect_docx(args.docx)
