@@ -2,7 +2,7 @@
 name: reglament
 description: >-
   Audits the current session for strict compliance with Hybrid IDE General
-  Execution Policy v0.9.6, performs the mandatory 4-Tier AI Battle Test
+  Execution Policy v0.9.7, performs the mandatory 4-Tier AI Battle Test
   (Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet, Tier 4.5 Copilot CLI),
   verifies Global Plugin rules and domain overlay AGENTS.md, and outputs
   the structured Plugin & Overlay Integration Log.
@@ -11,7 +11,7 @@ description: >-
 
 # 🛡️ Регламентний аудит та перевірка ШІ-матриці (/reglament, /reglamet)
 
-Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet` (з опціональним аргументом версії, наприклад `/reglament v0.9.6`), просить «перевірити регламент», «налаштувати чат на регламент» або провести повну діагностику готовності сесії до розробки.
+Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet` (з опціональним аргументом версії, наприклад `/reglament v0.9.7`), просить «перевірити регламент», «налаштувати чат на регламент» або провести повну діагностику готовності сесії до розробки.
 
 ---
 
@@ -38,9 +38,9 @@ description: >-
 2. Вивести обов'язковий публічний статус разом із віджетом `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`:
    - **Зафіксований домен:** `<Поточний домен робочого простору>`
    - **Індикатор контексту:** `<Реальна зона (🟢/🟡/🔴) за кроками S та токенами Nin/Nout>`
-   - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Protocol v0.9.6)`
+   - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Protocol v0.9.7)`
    - **Статус Batch Access:** `Авторизовано регламентом`
-   - **Цільова версія:** `v0.9.6` (Global Plugin Architecture)
+   - **Цільова версія:** `v0.9.7` (Global Plugin Architecture)
 
 ### 🛑 Крок 2: Бойовий 4-Tier аудит ШІ-матриці
 Виконати окремими одиночними командами (`BypassSandbox: true`):
@@ -51,7 +51,7 @@ description: >-
 3. **Tier 4 (Claude Sonnet 4.1 — Code Arbiter):**
    Сформувати вердикт готовності Шлюзу 4.1 до аудиту контрактів, сигнатур API та базового сетапу файлів.
 4. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter Probe):**
-   `copilot --version` (перевірка зв'язку та готовності CLI; запуск prompt `-p` потребує схвалення `+`).
+   `copilot --version` (перевірка зв'язку та готовності CLI за протоколом Host-First; інференс `-p` вимагає схвалення `+`).
 
 *Обов'язково вивести віджети `[AI Invocation Event]` для всіх активних провайдерів у чат!*
 

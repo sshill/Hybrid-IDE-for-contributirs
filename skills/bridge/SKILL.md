@@ -2,20 +2,20 @@
 name: bridge
 description: >-
   Generates a canonical Bridge Prompt to transition context to a new chat
-  under Hybrid IDE policy v0.9.6, enforcing the mandatory 4-Tier AI Battle Test,
+  under Hybrid IDE policy v0.9.7, enforcing the mandatory 4-Tier AI Battle Test,
   structured Plugin & Overlay Integration Log, and domain overlay AGENTS.md binding.
   Invoked as /bridge [version].
 ---
 
-# 🌉 Bridge Prompt Generator (Hybrid IDE Policy v0.9.6)
+# 🌉 Bridge Prompt Generator (Hybrid IDE Policy v0.9.7)
 
 Використовуйте цю навичку щоразу, коли користувач вводить `/bridge` (з версією або без), при вичерпанні контексту або для безшовного переходу в нову сесію без втрати прогресу, галюцинацій та повторного сканування кодової бази.
 
 ## Синтаксис виклику та версії
 
 - **`/bridge` (без аргументу):**
-  Автоматично застосовує актуальний Регламент **`v0.9.6`** та доменні оверлеї `AGENTS.md`.
-- **`/bridge <версія>` (наприклад `/bridge v0.9.5`, `/bridge v0.8`):**
+  Автоматично застосовує актуальний Регламент **`v0.9.7`** та доменні оверлеї `AGENTS.md`.
+- **`/bridge <версія>` (наприклад `/bridge v0.9.6`, `/bridge v0.9.5`, `/bridge v0.8`):**
   Активує цільову версію відповідно до архівних маніфестів.
 
 ---
@@ -33,10 +33,10 @@ description: >-
    Вивести в чат готовий для копіювання блок markdown такого змісту:
 
 ````markdown
-# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.6)
+# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.7)
 
 ## 1. Метадані стану та середовища
-- **Версія Регламенту:** `v0.9.6` (Global Plugin Architecture & Domain Overlays)
+- **Версія Регламенту:** `v0.9.7` (Global Plugin Architecture, 2D Telemetry & Copilot CLI Integration)
 - **Домен:** `<Назва домену>` (`<Повний шлях до робочого простору>`)
 - **Parent Conversation ID:** `<Поточний Conversation ID>`
 - **Active Git Branch:** `<Поточна гілка>` (коміт `<HEAD Commit SHA>`)

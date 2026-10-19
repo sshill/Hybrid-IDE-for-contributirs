@@ -178,8 +178,19 @@ def run_verified_script(script_path: str, script_args: list) -> int:
         return 1
 
 def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
-    """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1)."""
+    """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1 / v0.9.7)."""
     import re
+    # 1. Перевірка audited: copilot-cli (Policy v0.9.7)
+    audit_match = re.search(r"audited:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
+    if audit_match:
+        auditor = audit_match.group(1).strip().lower()
+        if "copilot" in auditor:
+            copilot_flag = "/tmp/antigravity_copilot_executed.flag"
+            copilot_auth = "/tmp/antigravity_copilot_authorized.flag"
+            if not (os.path.exists(copilot_flag) or os.path.exists(copilot_auth)):
+                return False, f"Фальсифікація аудиту: задекларовано '[audited: {auditor}]', але виконання Copilot CLI не зафіксовано в сесії."
+
+    # 2. Перевірка generated: <model>
     match = re.search(r"generated:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
     if not match:
         return True, "Атрибуція ШІ відсутня в коміті (ручний або структурний коміт)."

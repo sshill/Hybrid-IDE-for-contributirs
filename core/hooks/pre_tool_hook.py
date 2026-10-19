@@ -120,9 +120,23 @@ def main():
                 print(json.dumps(res))
                 return
 
+        # Захист від фальсифікації аудиту Copilot CLI (Policy v0.9.7)
+        if "commit" in cmd_line and "audited: copilot-cli" in cmd_line.lower():
+            copilot_flag = "/tmp/antigravity_copilot_executed.flag"
+            if not (os.path.exists(copilot_flag) or os.path.exists("/tmp/antigravity_copilot_authorized.flag")):
+                log(f"HARD DENY: unverified copilot-cli attribution in commit")
+                res = {
+                    "decision": "deny",
+                    "reason": "HARD GATE VIOLATION (Policy v0.9.7): Заборонено вказувати '[audited: copilot-cli]' у повідомленні коміту без підтвердженого виконання сесії Copilot CLI."
+                }
+                print(json.dumps(res))
+                return
+
         # Блокування фіктивних комітів ШІ-синтезу (Policy v0.9.1 / Anti-Shadow Gate)
         if "commit" in cmd_line and "generated:" in cmd_line.lower():
             prov_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py"
+            if not os.path.exists(prov_tool):
+                prov_tool = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "provenance", "phase4_provenance.py"))
             if not os.path.exists(prov_tool):
                 prov_tool = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "tools", "phase4_provenance.py"))
             if os.path.exists(prov_tool):
@@ -137,28 +151,28 @@ def main():
                     print(json.dumps(res))
                     return
 
-
         # ============================================================
-        # COPILOT HEAVY-ONLY ESCALATION GATE (Policy v0.9.4):
-        # Заборонено викликати GitHub Copilot CLI на дрібниці або рутинні аудити.
-        # Дозволено виключно при: (1) прапорці --heavy-refactor, (2) /tmp/antigravity_audit_failed.flag, (3) цільовому рефакторингу кодової бази цілком.
+        # COPILOT HEAVY-ONLY ESCALATION GATE (Policy v0.9.7):
+        # Дозволено виключно при: (1) прапорці /tmp/antigravity_copilot_authorized.flag (+ у чаті),
+        # (2) /tmp/antigravity_audit_failed.flag, (3) цільовому рефакторингу кодової бази (--heavy-refactor).
         # ============================================================
         if "copilot" in cmd_line:
             is_copilot_cli = any(tok in ("copilot", "/home/hills/.local/bin/copilot") for tok in cmd_line.split())
             if is_copilot_cli and not ("copilot help" in cmd_line or "copilot --version" in cmd_line or "copilot /login" in cmd_line):
+                copilot_auth_flag = "/tmp/antigravity_copilot_authorized.flag"
+                authorized = os.path.exists(copilot_auth_flag)
                 audit_failed = os.path.exists("/tmp/antigravity_audit_failed.flag")
                 heavy_refactor = "--heavy-refactor" in cmd_line or "рефакторинг" in cmd_line.lower() or "wholesale" in cmd_line.lower()
-                if not (audit_failed or heavy_refactor):
-                    log(f"HARD DENY: Copilot invoked for non-heavy task: {cmd_line}")
+                if not (authorized or audit_failed or heavy_refactor):
+                    log(f"HARD DENY: Copilot invoked without authorization: {cmd_line}")
                     res = {
                         "decision": "deny",
                         "reason": (
-                            "HARD GATE VIOLATION (Copilot Heavy-Only Escalation Gate v0.9.4):\n"
-                            "Виклик GitHub Copilot CLI заблоковано! Рутинний аудит та дрібні правки виконуються "
-                            "на токенах Antigravity (Google AI Pro) та Tier 1/2.\n"
-                            "Copilot резервується виключно для:\n"
-                            "1) Негативного вердикту аудиту Antigravity (/tmp/antigravity_audit_failed.flag)\n"
-                            "2) Монолітного рефакторингу всього коду під ключ (прапорець '--heavy-refactor')."
+                            "HARD GATE VIOLATION (Copilot Heavy-Only Escalation Gate v0.9.7):\n"
+                            "Виклик GitHub Copilot CLI заблоковано! Copilot дозволено виключно за:\n"
+                            "1) Санкцією користувача (+ у чаті / /tmp/antigravity_copilot_authorized.flag)\n"
+                            "2) Негативним вердиктом аудиту Sonnet (/tmp/antigravity_audit_failed.flag)\n"
+                            "3) Монолітним рефакторингом ('--heavy-refactor')."
                         )
                     }
                     print(json.dumps(res))
@@ -405,8 +419,13 @@ def main():
             cmd_line = args.get("CommandLine", "").strip()
             trusted_host_prefixes = (
                 "git ",
+                "copilot ",
+                "copilot",
+                "/home/hills/.local/bin/copilot",
                 "python3 .agents/scripts/diagnostic_runner.py",
                 "python3 /home/hills/Documents/.agents/scripts/diagnostic_runner.py",
+                "python3 core/engine/diagnostic_runner.py",
+                "python3 /home/hills/Documents/Hybrid-IDE-for-contributors/core/engine/diagnostic_runner.py",
                 "python3 Antigravity_Mgr/tools/",
                 "python3 /home/hills/Documents/Antigravity_Mgr/tools/",
                 "python3 .agents/tools/",

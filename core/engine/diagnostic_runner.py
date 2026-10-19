@@ -376,6 +376,96 @@ def query_openrouter_engine(prompt: str, model: str = "qwen/qwen-2.5-coder-32b-i
         print(f"❌ Помилка запиту до OpenRouter: {e}", file=sys.stderr)
         return f"ERROR: {e}"
 
+def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = None) -> str:
+    """Нативний інференс через GitHub Copilot CLI (Tier 4.5 Pre-Release Arbiter / Policy v0.9.7)."""
+    copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+    if not (os.path.exists(copilot_bin) or shutil.which("copilot")):
+        print("❌ GitHub Copilot CLI не знайдено в системі.", file=sys.stderr)
+        return "COPILOT_NOT_FOUND"
+
+    base_cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color"]
+    if mode == "audit":
+        target_prompt = f"Зроби поглиблений аудит архітектури, контрактів та синтаксису: {prompt}"
+    elif mode == "refactor":
+        target_prompt = f"Зроби важкий монолітний рефакторинг (--heavy-refactor): {prompt}"
+    else:
+        target_prompt = prompt
+
+    full_cmd = base_cmd + ["-p", target_prompt]
+    if extra_args:
+        full_cmd.extend(extra_args)
+
+    start_time = time.time()
+    print_section("GitHub Copilot CLI Інференс (Tier 4.5)")
+    try:
+        res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=180)
+        elapsed = round(time.time() - start_time, 2)
+        output_text = res.stdout.strip() or res.stderr.strip()
+
+        # Фіксація сесійного прапорця виконання для перевірки провененсу
+        try:
+            with open("/tmp/antigravity_copilot_executed.flag", "w", encoding="utf-8") as f_cop:
+                f_cop.write(f"COPILOT_EXECUTED at {time.time()} elapsed={elapsed} code={res.returncode}\n")
+        except Exception:
+            pass
+
+        print(f"\n> [!NOTE]")
+        print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
+        print(f"> - **Провайдер / Модель:** GitHub Copilot CLI / Claude Sonnet 4.1 / GPT-4o")
+        print(f"> - **Час інференсу:** {elapsed} с (Return code: {res.returncode})")
+        print(f"> - **Отриманий вердикт / результат:** {'SUCCESS' if res.returncode == 0 else 'WARNING'}\n")
+        return output_text
+    except subprocess.TimeoutExpired:
+        print("❌ Таймаут виклику Copilot CLI (180 с).", file=sys.stderr)
+        return "COPILOT_TIMEOUT"
+    except Exception as e:
+        print(f"❌ Помилка виклику Copilot CLI: {e}", file=sys.stderr)
+        return f"ERROR: {e}"
+
+def check_semantic_constraints(response_text: str, max_words: int = None, required_keys: list = None) -> dict:
+    """Програмна перевірка відповідей моделей на кількісні та структурні обмеження (Policy v0.9.7)."""
+    status = {"valid": True, "warnings": []}
+    if not response_text:
+        status["valid"] = False
+        status["warnings"].append("Відповідь порожня.")
+        return status
+
+    if max_words:
+        words = response_text.strip().split()
+        if len(words) > max_words:
+            status["valid"] = False
+            msg = f"Перевищено обмеження слів: отримано {len(words)} слів, очікувалось <= {max_words}."
+            status["warnings"].append(msg)
+            print(f"⚠️ [SEMANTIC CONSTRAINT WARNING]: {msg}", file=sys.stderr)
+
+    if required_keys:
+        for k in required_keys:
+            if k not in response_text:
+                status["valid"] = False
+                status["warnings"].append(f"Відсутній обов'язковий ключ/підрядок: '{k}'")
+
+    return status
+
+def pre_audit_code_file(file_path: str) -> bool:
+    """Детерміністична передрелізна перевірка синтаксису (AST + py_compile) перед Фазою 2."""
+    import py_compile
+    import ast
+    abs_p = os.path.abspath(file_path)
+    print_section(f"Deterministic Pre-Audit Gate: {os.path.basename(abs_p)}")
+    if not os.path.isfile(abs_p):
+        print(f"❌ Файл не знайдено: {abs_p}", file=sys.stderr)
+        return False
+    try:
+        with open(abs_p, "r", encoding="utf-8") as f:
+            code = f.read()
+        ast.parse(code)
+        py_compile.compile(abs_p, doraise=True)
+        print(f"🟢 [PRE-AUDIT PASS] AST та байткод валідні: {os.path.basename(abs_p)}")
+        return True
+    except Exception as e:
+        print(f"🔴 [PRE-AUDIT FAIL] Помилка валідації {os.path.basename(abs_p)}: {e}", file=sys.stderr)
+        return False
+
 def check_all_ai_agents(model_ollama: str = "qwen2.5-coder:1.5b", model_groq: str = "openai/gpt-oss-120b") -> int:
     """Комплексна перевірка зв'язку та інференсу з усіма провайдерами ШІ (Tier 1 Ollama + Tier 2 Groq)."""
     print_section("Комплексна перевірка ШІ-агентів (Tier 1 & Tier 2 Pre-flight)")
@@ -589,6 +679,15 @@ def main():
     parser.add_argument("--inspect-json", type=str, help="Структурна інспекція .json файлу")
     parser.add_argument("--inspect-ast", type=str, help="Аналіз Python AST файлу")
 
+    # Copilot CLI (Tier 4.5 / Policy v0.9.7)
+    parser.add_argument("--copilot-query", type=str, help="Запит до GitHub Copilot CLI")
+    parser.add_argument("--copilot-audit", type=str, help="Аудит файлу через GitHub Copilot CLI")
+    parser.add_argument("--copilot-refactor", type=str, help="Монолітний рефакторинг через GitHub Copilot CLI")
+
+    # Семантичний контроль та детерміністичний аудит (Policy v0.9.7)
+    parser.add_argument("--max-words", type=int, default=None, help="Обмеження максимальної кількості слів у відповіді")
+    parser.add_argument("--pre-audit", type=str, help="Детерміністична перевірка синтаксису (AST + py_compile) перед Фазою 2")
+
     # Запуск скриптів
     parser.add_argument("--run", type=str, help="Шлях до діагностичного скрипта для виконання")
     parser.add_argument("script_args", nargs="*", help="Додаткові аргументи для payload-скрипта")
@@ -656,6 +755,8 @@ def main():
     if args.ollama_query:
         print_section(f"Ollama Прямий запит ({args.model})")
         res = query_ollama_engine(args.ollama_query, model=args.model)
+        if args.max_words:
+            check_semantic_constraints(res, max_words=args.max_words)
         print(res)
         return 0
 
@@ -664,14 +765,40 @@ def main():
         print_section("Groq Cloud LPU Запит")
         groq_model = args.model if args.model and not args.model.startswith("qwen2.5") else "openai/gpt-oss-120b"
         res = query_groq_engine(args.groq_query, model=groq_model)
+        if args.max_words:
+            check_semantic_constraints(res, max_words=args.max_words)
         print(res)
         return 0
 
     if args.openrouter_query:
         print_section("OpenRouter Запит")
         res = query_openrouter_engine(args.openrouter_query)
+        if args.max_words:
+            check_semantic_constraints(res, max_words=args.max_words)
         print(res)
         return 0
+
+    # 5.1. GitHub Copilot CLI запити (Tier 4.5 / Policy v0.9.7)
+    if args.copilot_query:
+        res = query_copilot_engine(args.copilot_query, mode="query")
+        if args.max_words:
+            check_semantic_constraints(res, max_words=args.max_words)
+        print(res)
+        return 0
+
+    if args.copilot_audit:
+        res = query_copilot_engine(args.copilot_audit, mode="audit")
+        print(res)
+        return 0
+
+    if args.copilot_refactor:
+        res = query_copilot_engine(args.copilot_refactor, mode="refactor")
+        print(res)
+        return 0
+
+    # 5.2. Deterministic Pre-Audit Gate
+    if args.pre_audit:
+        return 0 if pre_audit_code_file(args.pre_audit) else 1
 
     # 6. Синтез скриптів через Ollama (Рівень 1)
     if args.synthesize_script:

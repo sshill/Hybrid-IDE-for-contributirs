@@ -208,12 +208,13 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 
 ### 8.4 Copilot Heavy-Only Escalation Gate
 - **Субординація:** первинний аудит, діагностика, щоденні перевірки й синтаксичні дрібниці виконуються **виключно** на токенах Antigravity (Google AI Studio / Pro), Tier 1 Ollama (0$) і Tier 2 Groq LPU. Квоти Copilot на рутину, дрібниці й поодинокі файли не витрачаються.
-- **GitHub Copilot CLI (Claude Sonnet 5.5 / o1)** дозволений лише в двох випадках:
+- **GitHub Copilot CLI (Claude Sonnet 5.5 / o1)** дозволений у трьох випадках (Policy v0.9.7):
 
 | # | Тригер |
 |---|---|
 | 1 | Негативний вердикт аудиту Antigravity (`FAIL` / `REJECT`) |
-| 2 | Пряма задача на монолітний рефакторинг усієї кодової бази під ключ (прапорець `--heavy-refactor`: весь регламент або мод Fallout 4 з деревом Papyrus-залежностей) |
+| 2 | Пряма задача на монолітний рефакторинг усієї кодової бази під ключ (прапорець `--heavy-refactor`: весь регламент або кодова база) |
+| 3 | Пряма санкція користувача (`+`) у чаті через сесійний прапорець авторизації (`/tmp/antigravity_copilot_authorized.flag`) |
 
 - **Local Git First:** локальні коміти виконуються автономно, щоб зберегти стан проти компакції контексту. Автоматичний `git push` заборонений. Віддалений репозиторій оновлюється лише при релізі великої версії за явної команди розробника (`push_to_github.sh`).
 - Маніфест: `copilot_heavy_only_escalation_gate.mode = heavy_refactoring_and_failed_audit_only`, `remote_push_policy = explicit_release_only`.

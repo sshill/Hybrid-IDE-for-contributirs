@@ -53,7 +53,8 @@ THROUGHPUT_MAP = {
     "qwen2.5-coder:1.5b": {"speed": 20.0, "ttft": 0.3, "ram_gb": 1.2, "tier": 1, "provider": "Ollama Local Edge"},
     "qwen2.5-coder:3b":   {"speed": 10.0, "ttft": 0.6, "ram_gb": 2.2, "tier": 1, "provider": "Ollama Local Edge"},
     "qwen2.5-coder:7b":   {"speed": 2.8,  "ttft": 1.8, "ram_gb": 5.1, "tier": 1, "provider": "Ollama Local Edge"},
-    "openai/gpt-oss-120b":{"speed": 460.0,"ttft": 0.2, "ram_gb": 0.0, "tier": 2, "provider": "Groq Cloud LPU"}
+    "openai/gpt-oss-120b":{"speed": 460.0,"ttft": 0.2, "ram_gb": 0.0, "tier": 2, "provider": "Groq Cloud LPU"},
+    "copilot-cli":        {"speed": 60.0, "ttft": 2.0, "ram_gb": 0.0, "tier": 4.5, "provider": "GitHub Copilot CLI"}
 }
 
 # Безпечний робочий бюджет Groq Cloud зі зниженням на 20% (LiteLLM Rate Guard)
@@ -74,7 +75,7 @@ def calculate_adaptive_timeout(etc: float) -> int:
     """Адаптивний розрахунок таймауту сокета замість жорстких 90 с."""
     return max(30, int(1.5 * etc) + 10)
 
-def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec: float = 30.0, allow_cloud: bool = True) -> dict:
+def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec: float = 30.0, allow_cloud: bool = True, heavy_refactor: bool = False) -> dict:
     """
     Розрахунок маршрутизації на основі реальної пропускної здатності (RouteLLM + LiteLLM + FrugalGPT).
     Обирає модель, яка задовольняє SLA та не перевищує безпечні ліміти пам'яті/квот.
@@ -92,7 +93,12 @@ def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec
     # Перевірка безпечного ліміту Groq (-20%)
     groq_fits_budget = estimated_out_tokens <= GROQ_SAFETY_BUDGET["max_single_out"]
 
-    if allow_cloud and (estimated_out_tokens > 250 or prompt_tokens > 3000 or etc_7b > sla_sec):
+    if heavy_refactor:
+        selected_tier = 4.5
+        selected_model = "copilot-cli"
+        provider = "GitHub Copilot CLI"
+        reason = "Монолітний рефакторинг кодової бази / Pre-Release Arbiter Gate: делегується на Tier 4.5 (Copilot CLI)."
+    elif allow_cloud and (estimated_out_tokens > 250 or prompt_tokens > 3000 or etc_7b > sla_sec):
         if groq_fits_budget:
             selected_tier = 2
             selected_model = "openai/gpt-oss-120b"
@@ -167,13 +173,14 @@ def main():
     parser.add_argument("--sla-sec", type=float, default=30.0, help="Максимальний допустимий час генерації (SLA)")
     parser.add_argument("--no-cloud", action="store_true", help="Заборонити хмарний оверфлоу (суворо офлайн)")
     parser.add_argument("--format-widget", action="store_true", help="Вивести результат у вигляді структурованого віджета")
+    parser.add_argument("--heavy-refactor", action="store_true", help="Маршрутизація для монолітного рефакторингу коду (Tier 4.5 Copilot CLI)")
 
     args = parser.parse_args()
 
     if args.validate_plan:
         return validate_plan(args.validate_plan)
     elif args.route:
-        dec = calculate_route(args.prompt_tokens, args.out_tokens, sla_sec=args.sla_sec, allow_cloud=not args.no_cloud)
+        dec = calculate_route(args.prompt_tokens, args.out_tokens, sla_sec=args.sla_sec, allow_cloud=not args.no_cloud, heavy_refactor=args.heavy_refactor)
         if args.format_widget:
             print(format_route_widget(dec))
         else:
