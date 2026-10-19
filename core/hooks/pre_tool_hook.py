@@ -417,6 +417,12 @@ def main():
         bypass = args.get("BypassSandbox")
         if bypass is True or bypass == "true":
             cmd_line = args.get("CommandLine", "").strip()
+            # Санітизація лапок (Policy v0.9.7): зняття зовнішніх лапок та нормалізація внутрішніх шляхів
+            cmd_clean = cmd_line.strip("\"'")
+            cmd_norm = cmd_clean
+            if cmd_clean.startswith("python3 \"") or cmd_clean.startswith("python3 '"):
+                cmd_norm = "python3 " + cmd_clean[8:].strip("\"'")
+
             trusted_host_prefixes = (
                 "git ",
                 "copilot ",
@@ -430,12 +436,12 @@ def main():
                 "python3 /home/hills/Documents/Antigravity_Mgr/tools/",
                 "python3 .agents/tools/",
                 "python3 /home/hills/Documents/.agents/tools/",
-                "python3 \"F4 modding/",
+                "python3 F4 modding/",
                 "python3 /home/hills/Documents/fallaut/F4 modding/",
                 "python3 fallaut/",
                 "aplay "
             )
-            is_trusted = any(cmd_line.startswith(p) for p in trusted_host_prefixes)
+            is_trusted = any(cmd_clean.startswith(p) or cmd_norm.startswith(p) for p in trusted_host_prefixes)
             if not is_trusted:
                 needs_prompt = True
 
@@ -449,7 +455,7 @@ def main():
             base_name = os.path.basename(normalized)
 
             # 1. Документація, плани, звіти, конфігурації та системні артефакти (Policy v0.9.3)
-            controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java")
+            controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java", ".psc")
             is_code_file = any(normalized.endswith(ext) for ext in controlled_code_exts)
 
             # Безумовні артефакти життєвого циклу оркестратора (Policy v0.9.3: Правило 2 файлів)
