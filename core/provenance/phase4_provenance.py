@@ -52,16 +52,20 @@ def load_ledger() -> dict:
     return ledger
 
 def save_ledger(ledger: dict):
-    """Синхронне збереження реєстру в /tmp та у персистентне сховище .agents/."""
+    """Синхронне атомарне збереження реєстру в /tmp та у персистентне сховище .agents/."""
     for path in (LEDGER_PATH, PERSISTENT_LEDGER_PATH):
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
+            tmp_path = path + f".tmp.{os.getpid()}"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
                 try:
                     json.dump(ledger, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
                 finally:
                     fcntl.flock(f, fcntl.LOCK_UN)
+            os.replace(tmp_path, path)
         except Exception as e:
             print(f"⚠️ Попередження: не вдалося зберегти реєстр у {path}: {e}", file=sys.stderr)
 
@@ -80,6 +84,33 @@ def register_provenance(
             print(f"❌ Файл для реєстрації не знайдено: {abs_path}", file=sys.stderr)
             return False
         sha256_hash = get_file_sha256(abs_path)
+
+    # АНТИ-ФАЛЬСИФІКАЦІЙНИЙ ШЛЮЗ (Anti-Forgery Provenance Gate v0.9.8):
+    # Забороняє фіктивну реєстрацію без реальних метрик або прапорця генератора
+    is_ollama_model = any(k in model.lower() for k in ("qwen", "llama", "coder", "deepseek", "mistral", "gemma", "ollama"))
+    if is_ollama_model:
+        has_metrics = (eval_count is not None and eval_count > 0 and 
+                       prompt_eval_duration_ms is not None and prompt_eval_duration_ms > 0)
+        has_valid_flag = False
+        flag_p = "/tmp/antigravity_ollama_synthesized.flag"
+        if os.path.exists(flag_p):
+            try:
+                if (time.time() - os.path.getmtime(flag_p)) < 900:
+                    with open(flag_p, "r", encoding="utf-8") as f_fl:
+                        if abs_path in f_fl.read():
+                            has_valid_flag = True
+            except Exception:
+                pass
+
+        if not (has_metrics or has_valid_flag):
+            print(
+                f"❌ [HARD REJECT] Фальсифікація провененсу виявлена!\n"
+                f"   Спроба зареєструвати файл {os.path.basename(abs_path)} за моделлю '{model}' без реального інференсу.\n"
+                f"   Відсутні обов'язкові поля eval_count / prompt_eval_duration_ms або активний сесійний прапорець генерації.\n"
+                f"   Код має генеруватися через канонічний раннер: diagnostic_runner.py --synthesize-script",
+                file=sys.stderr
+            )
+            return False
 
     entry = {
         "sha256": sha256_hash,
@@ -180,15 +211,14 @@ def run_verified_script(script_path: str, script_args: list) -> int:
 def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
     """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1 / v0.9.7)."""
     import re
-    # 1. Перевірка audited: copilot-cli (Policy v0.9.7)
+    # 1. Перевірка audited: copilot-cli (Policy v0.9.7 / v0.9.8)
     audit_match = re.search(r"audited:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
     if audit_match:
         auditor = audit_match.group(1).strip().lower()
         if "copilot" in auditor:
             copilot_flag = "/tmp/antigravity_copilot_executed.flag"
-            copilot_auth = "/tmp/antigravity_copilot_authorized.flag"
-            if not (os.path.exists(copilot_flag) or os.path.exists(copilot_auth)):
-                return False, f"Фальсифікація аудиту: задекларовано '[audited: {auditor}]', але виконання Copilot CLI не зафіксовано в сесії."
+            if not os.path.exists(copilot_flag):
+                return False, f"Фальсифікація аудиту: задекларовано '[audited: {auditor}]', але виконання Copilot CLI не зафіксовано в сесії (відсутній прапорець виконання copilot_executed.flag)."
 
     # 2. Перевірка generated: <model>
     match = re.search(r"generated:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
@@ -196,6 +226,9 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
         return True, "Атрибуція ШІ відсутня в коміті (ручний або структурний коміт)."
 
     model_claimed = match.group(1).strip().lower()
+    if not model_claimed:
+        return False, "Фальсифікація авторства: назва моделі у [generated: ...] порожня."
+
     ledger = load_ledger()
     if not ledger:
         return False, f"Реєстр провененсу порожній: генерацію моделлю '{model_claimed}' не підтверджено."
@@ -203,7 +236,7 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
     matched_entries = []
     for path, entry in ledger.items():
         entry_model = entry.get("model", "").strip().lower()
-        if model_claimed in entry_model or entry_model in model_claimed:
+        if entry_model and (model_claimed == entry_model or entry_model in model_claimed or model_claimed in entry_model):
             matched_entries.append(path)
 
     if not matched_entries:

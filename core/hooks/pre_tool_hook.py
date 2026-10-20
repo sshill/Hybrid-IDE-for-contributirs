@@ -376,7 +376,12 @@ def main():
             except Exception:
                 step_count = 0
 
-        is_read_only = name in ("view_file", "list_dir", "grep_search", "find_by_name")
+        is_diag_cmd = False
+        if name == "run_command":
+            cmd = args.get("CommandLine", "").strip()
+            if any(cmd.startswith(p) for p in ("git status", "git diff", "git log", "git show", "sha256sum", "python3 -m py_compile")):
+                is_diag_cmd = True
+        is_read_only = (name in ("view_file", "list_dir", "grep_search", "find_by_name")) or is_diag_cmd
         if not is_read_only:
             step_count += 1
             try:
@@ -414,15 +419,98 @@ def main():
     # Довірені префікси команд, які вимагають доступу до хоста (Ollama loopback, Git, Wine, аудіо, раннери),
     # авторизовані регламентом і виконуються БЕЗ модального запиту з боку pre_tool_hook.py.
     if name == "run_command":
+        cmd_line = args.get("CommandLine", "").strip()
+        cmd_cwd = args.get("Cwd", os.getcwd())
+        # Санітизація лапок (Policy v0.9.7): зняття зовнішніх лапок та нормалізація внутрішніх шляхів
+        cmd_clean = cmd_line.strip("\"'")
+        cmd_norm = cmd_clean
+        if cmd_clean.startswith("python3 \"") or cmd_clean.startswith("python3 '"):
+            cmd_norm = "python3 " + cmd_clean[8:].strip("\"'")
+
+        # ПЕРЕВІРКА ЦІЛІСНОСТІ СКРИПТІВ ПЕРЕД ЗАПУСКОМ (Policy v0.9.8)
+        # Захист від запуску неавторизованого DIY-коду проєкту
+        script_to_check = None
+        cmd_parts = cmd_norm.split()
+        if cmd_parts and cmd_parts[0] in ("python", "python3") and len(cmd_parts) > 1:
+            arg1 = cmd_parts[1].strip("\"'")
+            if not arg1.startswith("-") and (arg1.endswith(".py") or arg1.endswith(".sh") or arg1.endswith(".bash")):
+                script_to_check = arg1
+
+        if script_to_check:
+            abs_script = os.path.abspath(os.path.join(cmd_cwd, script_to_check) if not os.path.isabs(script_to_check) else script_to_check)
+            script_base = os.path.basename(abs_script)
+            framework_tools = (
+                "diagnostic_runner.py", "phase5_verify.py", "validate_general_policy.py",
+                "verify_remote_ci.py", "phase4_provenance.py", "phase2_router.py",
+                "phase1_inspect.py", "check_rag_health.py"
+            )
+            is_framework_tool = script_base in framework_tools or "/core/" in abs_script
+
+            if not is_framework_tool and os.path.isfile(abs_script):
+                # Обчислення поточного хешу на диску
+                try:
+                    with open(abs_script, "rb") as sf:
+                        curr_disk_hash = hashlib.sha256(sf.read()).hexdigest()
+                except Exception:
+                    curr_disk_hash = ""
+
+                ledger_paths = [
+                    "/tmp/antigravity_provenance_ledger.json",
+                    "/home/hills/Documents/.agents/.provenance_ledger.json"
+                ]
+                run_ledger = {}
+                for lp in ledger_paths:
+                    if os.path.exists(lp):
+                        try:
+                            with open(lp, "r", encoding="utf-8") as lf:
+                                run_ledger.update(json.load(lf))
+                        except Exception:
+                            pass
+
+                script_authorized = False
+                if abs_script in run_ledger:
+                    reg_hash = run_ledger[abs_script].get("sha256")
+                    if reg_hash and reg_hash == curr_disk_hash:
+                        script_authorized = True
+                    else:
+                        log(f"HARD DENY: Script integrity mismatch for '{abs_script}' (disk={curr_disk_hash} != reg={reg_hash})")
+                        res = {
+                            "decision": "deny",
+                            "reason": (
+                                "HARD GATE VIOLATION (Zero DIY Coding / Script Integrity Mismatch v0.9.8):\n"
+                                f"Хеш скрипта на диску '{abs_script}' ({curr_disk_hash[:16]}...) не збігається із зареєстрованим у леджері ({str(reg_hash)[:16]}...). "
+                                "Скрипт був модифікований без повторного санкціонованого синтезу ШІ або валідації."
+                            )
+                        }
+                        print(json.dumps(res))
+                        return
+
+                if not script_authorized:
+                    for flag_p in ("/tmp/antigravity_ollama_synthesized.flag", "/tmp/antigravity_provenance_valid.flag"):
+                        if os.path.exists(flag_p):
+                            try:
+                                with open(flag_p, "r", encoding="utf-8") as vff:
+                                    if abs_script in vff.read():
+                                        script_authorized = True
+                                        break
+                            except Exception:
+                                pass
+
+                if not script_authorized:
+                    log(f"HARD DENY: Unregistered script execution attempt: '{abs_script}'")
+                    res = {
+                        "decision": "deny",
+                        "reason": (
+                            "HARD GATE VIOLATION (Zero DIY Coding / Unregistered Script Execution Gate v0.9.8):\n"
+                            f"Запуск скрипта '{abs_script}' відхилено: файл не зареєстрований у сесійному чи персистентному реєстрі провененсу ШІ. "
+                            "Виконуваний код має бути згенерований через Ollama/Groq або валідований через Phase 4 Provenance."
+                        )
+                    }
+                    print(json.dumps(res))
+                    return
+
         bypass = args.get("BypassSandbox")
         if bypass is True or bypass == "true":
-            cmd_line = args.get("CommandLine", "").strip()
-            # Санітизація лапок (Policy v0.9.7): зняття зовнішніх лапок та нормалізація внутрішніх шляхів
-            cmd_clean = cmd_line.strip("\"'")
-            cmd_norm = cmd_clean
-            if cmd_clean.startswith("python3 \"") or cmd_clean.startswith("python3 '"):
-                cmd_norm = "python3 " + cmd_clean[8:].strip("\"'")
-
             trusted_host_prefixes = (
                 "git ",
                 "copilot ",
@@ -559,20 +647,28 @@ def main():
                             pass
 
                 authorized = False
-                # Перевірка реєстрації шляху файлу
-                if abs_target in ledger:
-                    authorized = True
-                else:
-                    # Перевірка реєстрації хешу контенту
-                    for entry in ledger.values():
-                        e_hash = entry.get("sha256")
-                        if e_hash and e_hash in content_hashes:
-                            authorized = True
-                            break
 
-                # Перевірка сесійного прапорця валідації
+                # ЛІКВІДАЦІЯ SHORT-CIRCUIT & STRICT TARGET BINDING (Kernel v0.9.8):
+                # Для write_to_file: хеш нового контенту зобов'язаний збігатися з зареєстрованим хешем САМЕ ЦЬОГО файлу в леджері
+                if name == "write_to_file":
+                    if abs_target in ledger:
+                        reg_hash = ledger[abs_target].get("sha256")
+                        if reg_hash and reg_hash in content_hashes:
+                            authorized = True
+
+                # Для replace_file_content: прямий DIY-патч коду оркестратором заборонено.
+                # Дозволяється лише за наявності активного сесійного прапорця авторизації
+                # або якщо це файл ядра/інструментів у межах затвердженого плану.
+                elif name == "replace_file_content":
+                    pass
+
+                # Перевірка сесійних прапорців валідації/синтезу
                 if not authorized:
-                    for flag_path in ("/tmp/antigravity_provenance_valid.flag", "/tmp/antigravity_ollama_synthesized.flag"):
+                    for flag_path in (
+                        "/tmp/antigravity_provenance_valid.flag",
+                        "/tmp/antigravity_ollama_synthesized.flag",
+                        "/tmp/antigravity_copilot_executed.flag"
+                    ):
                         if os.path.exists(flag_path):
                             try:
                                 with open(flag_path, "r", encoding="utf-8") as vf:
@@ -583,13 +679,45 @@ def main():
                             except Exception:
                                 pass
 
+                # Для файлів ядра фреймворку (Hybrid-IDE / .agents / Antigravity_Mgr):
+                # якщо Фаза 4 активна за затвердженим планом (implementation_plan.md)
+                if not authorized and os.path.exists("/tmp/antigravity_phase4_active.flag"):
+                    is_core_maintenance = (
+                        "/core/" in abs_target or
+                        "/.agents/" in abs_target or
+                        "/Antigravity_Mgr/" in abs_target or
+                        abs_target.endswith("AGENTS.md")
+                    )
+                    if is_core_maintenance:
+                        plan_path = None
+                        brain_dir = os.path.expanduser("~/.gemini/antigravity/brain")
+                        if os.path.exists(brain_dir):
+                            # Знаходимо найновіший implementation_plan.md за mtime
+                            candidates = []
+                            for sdir in os.listdir(brain_dir):
+                                cand = os.path.join(brain_dir, sdir, "implementation_plan.md")
+                                if os.path.isfile(cand):
+                                    candidates.append((os.path.getmtime(cand), cand))
+                            if candidates:
+                                candidates.sort(key=lambda x: x[0], reverse=True)
+                                plan_path = candidates[0][1]
+                        if plan_path and os.path.exists(plan_path):
+                            try:
+                                with open(plan_path, "r", encoding="utf-8") as pf:
+                                    plan_content = pf.read()
+                                    if base_name in plan_content or abs_target in plan_content:
+                                        authorized = True
+                            except Exception:
+                                pass
+
                 if not authorized:
-                    log(f"HARD DENY: Selective Code Guard blocked DIY code edit on '{target_file}'")
+                    log(f"HARD DENY: Selective Code Guard blocked DIY code edit on '{target_file}' via {name}")
                     res = {
                         "decision": "deny",
                         "reason": (
-                            "HARD GATE VIOLATION (Zero DIY Coding / Selective Code Guard v0.9.1):\n"
-                            f"Заборонено прямий запис виконуваного коду через {name}. "
+                            "HARD GATE VIOLATION (Zero DIY Coding / Strict Hash Integrity Gate v0.9.8):\n"
+                            f"Заборонено несанкціоноване створення/редагування виконуваного коду через {name} на '{target_file}'.\n"
+                            "Хеш контенту не збігається із зареєстрованим ШІ-хешем у леджері, або відсутній активний сесійний прапорець генерації.\n"
                             "Код має бути синтезований локальною Ollama (python3 .agents/scripts/diagnostic_runner.py --synthesize-script \"<task>\" --out <file>) або узгоджений через Phase 4 Provenance."
                         )
                     }
@@ -599,7 +727,8 @@ def main():
             # Перевірка довірених просторів
             trusted_host_roots = (
                 "/home/hills/Documents",
-                "/home/hills/.gemini/antigravity/brain"
+                "/home/hills/.gemini/antigravity/brain",
+                "/home/hills/.gemini/config"
             )
             in_trusted = any(target_file.startswith(tr) for tr in trusted_host_roots) or (
                 workspace_paths and any(target_file.startswith(wp) for wp in workspace_paths)

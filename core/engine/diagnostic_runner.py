@@ -402,12 +402,13 @@ def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = No
         elapsed = round(time.time() - start_time, 2)
         output_text = res.stdout.strip() or res.stderr.strip()
 
-        # Фіксація сесійного прапорця виконання для перевірки провененсу
-        try:
-            with open("/tmp/antigravity_copilot_executed.flag", "w", encoding="utf-8") as f_cop:
-                f_cop.write(f"COPILOT_EXECUTED at {time.time()} elapsed={elapsed} code={res.returncode}\n")
-        except Exception:
-            pass
+        # Фіксація сесійного прапорця виконання для перевірки провененсу (лише при успіху)
+        if res.returncode == 0:
+            try:
+                with open("/tmp/antigravity_copilot_executed.flag", "w", encoding="utf-8") as f_cop:
+                    f_cop.write(f"COPILOT_EXECUTED at {time.time()} elapsed={elapsed} code={res.returncode}\n")
+            except Exception:
+                pass
 
         print(f"\n> [!NOTE]")
         print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
@@ -485,8 +486,13 @@ def run_target_script(script_path: str, script_args: list) -> int:
     abs_path = os.path.abspath(script_path)
     if not os.path.exists(abs_path):
         print(f"❌ Помилка: Файл не знайдено: {abs_path}", file=sys.stderr)
+        return 1
     # Anti-Shadow Gate v0.8.2: перевірка сесійного реєстру провененсу
-    prov_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py"
+    prov_tool = os.path.expanduser("~/Documents/Antigravity_Mgr/tools/phase4_provenance.py")
+    if not os.path.exists(prov_tool):
+        local_prov = os.path.join(os.path.dirname(os.path.dirname(__file__)), "provenance", "phase4_provenance.py")
+        if os.path.exists(local_prov):
+            prov_tool = local_prov
     if os.path.exists(prov_tool):
         res = subprocess.run([sys.executable, prov_tool, "--run", abs_path] + script_args)
         return res.returncode

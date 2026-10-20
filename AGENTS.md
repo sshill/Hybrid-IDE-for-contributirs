@@ -1,4 +1,4 @@
-# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.7)
+# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.8)
 
 Доповнює глобальне ядро Hybrid-IDE (`~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md`). Загальні 5 фаз та OS Hard Gates діють автоматично.
 
@@ -7,8 +7,10 @@
 - **Мови:** Python 3.10–3.13 (суворо stdlib only, zero-dep), POSIX Bash.
 - **Архітектура модулів:**
   * `core/engine/diagnostic_runner.py` — діагностичний інференс ШІ (Tier 1 Ollama, Tier 2 Groq, Tier 4.5 Copilot CLI, Semantic Constraint Checker & Pre-Audit Gate).
-  * `core/router/phase2_router.py` — маршрутизація моделей (Throughput Model v0.9.7) та бюджет токенів.
-  * `core/provenance/phase4_provenance.py` — подвійний SLSA-реєстр цілісності коду та валідація атрибуції `[audited: copilot-cli]`.
+  * `core/router/phase2_router.py` — маршрутизація моделей (Throughput Model v0.9.8) та бюджет токенів.
+  * `core/provenance/phase4_provenance.py` — подвійний SLSA-реєстр цілісності коду, Anti-Forgery Gate, атомарне збереження леджера та валідація атрибуції `[audited: copilot-cli]`.
+  * `core/hooks/pre_tool_hook.py` — OS Hard Gates: Zero Inline-Eval, Strict Hash Integrity Gate, Script Provenance Gate та Dynamic Plan-Aware Step Budget.
+  * `core/inspect/phase1_inspect.py` — 2D-телеметрія контексту та AST-інспектор.
   * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + політика).
   * `core/verify/verify_remote_ci.py` — опитування GitHub Actions CI.
 
