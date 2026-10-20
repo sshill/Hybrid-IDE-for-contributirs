@@ -255,30 +255,75 @@ def main():
         log(f"view_file invoked for: {args.get('AbsolutePath', '')}")
 
     # ============================================================
-    # 3. HARD DENY GATE: Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4)
+    # 3. HARD DENY GATE: Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4 / v0.9.8)
     # ============================================================
-    phase4_flag = "/tmp/antigravity_phase4_active.flag"
-    contract_file = "/tmp/antigravity_phase4_contract.json"
-    history_file = "/tmp/antigravity_action_history.json"
-    step_file = "/tmp/antigravity_phase4_steps.txt"
+    # ІЗОЛЯЦІЯ СТАНУ ЗА СЕСІЄЮ ТА ВОРКСПЕЙСОМ (Kernel v0.9.8 Session Namespace):
+    ws_id = ""
+    if workspace_paths and workspace_paths[0]:
+        ws_id = hashlib.sha256(workspace_paths[0].encode("utf-8")).hexdigest()[:8]
+    elif "Cwd" in args:
+        ws_id = hashlib.sha256(args["Cwd"].encode("utf-8")).hexdigest()[:8]
+    else:
+        ws_id = hashlib.sha256(os.getcwd().encode("utf-8")).hexdigest()[:8]
+
+    phase4_flag = f"/tmp/antigravity_phase4_{ws_id}.flag"
+    legacy_phase4_flag = "/tmp/antigravity_phase4_active.flag"
+    contract_file = f"/tmp/antigravity_phase4_contract_{ws_id}.json"
+    legacy_contract_file = "/tmp/antigravity_phase4_contract.json"
+    history_file = f"/tmp/antigravity_action_history_{ws_id}.json"
+    step_file = f"/tmp/antigravity_phase4_steps_{ws_id}.txt"
+    legacy_step_file = "/tmp/antigravity_phase4_steps.txt"
+
+    # Авто-скидання застарілого лічильника кроків (TTL 15 хв бездіяльності)
+    for s_file in (step_file, legacy_step_file):
+        if os.path.exists(s_file):
+            try:
+                if (time.time() - os.path.getmtime(s_file)) > 900:
+                    os.remove(s_file)
+            except Exception:
+                pass
 
     # Завантаження динамічного контракту плану
     contract = {}
-    dynamic_budget = 30
+    dynamic_budget = 50  # Базовий динамічний поріг збільшено до 50 дій
     planned_files = []
     loop_window = 4
     max_identical = 2
 
-    if os.path.exists(contract_file):
-        try:
-            with open(contract_file, "r", encoding="utf-8") as cf:
-                contract = json.load(cf)
-                dynamic_budget = contract.get("dynamic_step_budget", 30)
-                planned_files = contract.get("planned_files", [])
-                loop_window = contract.get("semantic_loop_window", 4)
-                max_identical = contract.get("max_identical_actions", 2)
-        except Exception:
-            pass
+    # 1. Спроба завантаження з json-контракту
+    for c_file in (contract_file, legacy_contract_file):
+        if os.path.exists(c_file):
+            try:
+                with open(c_file, "r", encoding="utf-8") as cf:
+                    contract = json.load(cf)
+                    dynamic_budget = contract.get("dynamic_step_budget", 50)
+                    planned_files = contract.get("planned_files", [])
+                    loop_window = contract.get("semantic_loop_window", 4)
+                    max_identical = contract.get("max_identical_actions", 2)
+                    break
+            except Exception:
+                pass
+
+    # 2. Якщо json-контракту немає, динамічний розрахунок із найновішого implementation_plan.md
+    if dynamic_budget == 50:
+        brain_dir = os.path.expanduser("~/.gemini/antigravity/brain")
+        if os.path.exists(brain_dir):
+            cands = []
+            for sdir in os.listdir(brain_dir):
+                c_plan = os.path.join(brain_dir, sdir, "implementation_plan.md")
+                if os.path.isfile(c_plan):
+                    cands.append((os.path.getmtime(c_plan), c_plan))
+            if cands:
+                cands.sort(key=lambda x: x[0], reverse=True)
+                latest_plan = cands[0][1]
+                try:
+                    with open(latest_plan, "r", encoding="utf-8") as pf:
+                        p_txt = pf.read()
+                        mods = len(re.findall(r"\[(MODIFY|NEW|DELETE)\]", p_txt))
+                        if mods > 0:
+                            dynamic_budget = max(50, mods * 10)
+                except Exception:
+                    pass
 
     # А. Семантичний детектор циклів (Semantic Loop Detector, W=4)
     try:
@@ -367,11 +412,24 @@ def main():
                     return
 
     # В. Динамічний ліміт кроків Фази 4 (Dynamic Step Budget)
-    if os.path.exists(phase4_flag):
+    is_phase4_active = os.path.exists(phase4_flag) or os.path.exists(legacy_phase4_flag)
+    if is_phase4_active:
+        # Автоматичне скидання прапорців Фази 4 при створенні коміту
+        if name == "run_command":
+            cmd = args.get("CommandLine", "").strip()
+            if cmd.startswith("git commit"):
+                for f_clean in (phase4_flag, legacy_phase4_flag, step_file, legacy_step_file):
+                    if os.path.exists(f_clean):
+                        try:
+                            os.remove(f_clean)
+                        except Exception:
+                            pass
+
         step_count = 0
-        if os.path.exists(step_file):
+        active_step_file = step_file if os.path.exists(step_file) else (legacy_step_file if os.path.exists(legacy_step_file) else step_file)
+        if os.path.exists(active_step_file):
             try:
-                with open(step_file, "r") as f:
+                with open(active_step_file, "r") as f:
                     step_count = int(f.read().strip())
             except Exception:
                 step_count = 0
@@ -379,13 +437,13 @@ def main():
         is_diag_cmd = False
         if name == "run_command":
             cmd = args.get("CommandLine", "").strip()
-            if any(cmd.startswith(p) for p in ("git status", "git diff", "git log", "git show", "sha256sum", "python3 -m py_compile")):
+            if any(cmd.startswith(p) for p in ("git status", "git diff", "git log", "git show", "sha256sum", "python3 -m py_compile", "readlink", "diff", "find")):
                 is_diag_cmd = True
         is_read_only = (name in ("view_file", "list_dir", "grep_search", "find_by_name")) or is_diag_cmd
         if not is_read_only:
             step_count += 1
             try:
-                with open(step_file, "w") as f:
+                with open(active_step_file, "w") as f:
                     f.write(str(step_count))
             except Exception:
                 pass
