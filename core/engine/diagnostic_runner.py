@@ -51,6 +51,25 @@ def load_env_credentials():
 
 load_env_credentials()
 
+def write_session_flag(flag_name: str, content: str):
+    """Dual-write session flag to Brain-First .system_generated and /tmp."""
+    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+    if os.path.exists(brain_root):
+        try:
+            for bdir in os.listdir(brain_root):
+                sg = os.path.join(brain_root, bdir, ".system_generated")
+                if os.path.isdir(sg):
+                    with open(os.path.join(sg, flag_name), "w", encoding="utf-8") as f_bf:
+                        f_bf.write(content)
+        except Exception:
+            pass
+    try:
+        tmp_name = flag_name if flag_name.startswith("antigravity_") else f"antigravity_{flag_name}"
+        with open(os.path.join("/tmp", tmp_name), "w", encoding="utf-8") as f_tmp:
+            f_tmp.write(content)
+    except Exception:
+        pass
+
 def print_section(title: str):
     print(f"\n{'=' * 60}")
     print(f"🔹 {title}")
@@ -376,6 +395,113 @@ def query_openrouter_engine(prompt: str, model: str = "qwen/qwen-2.5-coder-32b-i
         print(f"❌ Помилка запиту до OpenRouter: {e}", file=sys.stderr)
         return f"ERROR: {e}"
 
+def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = None, model: str = "claude-3-5-sonnet-20241022") -> str:
+    """
+    Інференс Tier 4: Claude Sonnet Arbiter (Policy v0.9.9).
+    Каскад провайдерів:
+    1. Direct Anthropic API (якщо є ANTHROPIC_API_KEY)
+    2. OpenRouter API (якщо є OPENROUTER_API_KEY з моделлю anthropic/claude-3.5-sonnet)
+    3. GitHub Copilot CLI з моделлю claude-3.5-sonnet
+    """
+    start_time = time.time()
+    if mode == "audit":
+        target_prompt = f"Зроби поглиблений аудит плану впровадження (Phase 2.5 Pre-Approval Gate) на відповідність регламенту, відсутність прогалин та ризиків:\n\n{prompt}"
+    elif mode == "precheck":
+        target_prompt = f"Зроби Phase 4.1 Pre-Execution Check: перевір повноту зібраної інформації, точні шляхи файлів та безпеку запланованих змін перед модифікацією:\n\n{prompt}"
+    else:
+        target_prompt = prompt
+
+    output_text = None
+    provider_used = None
+
+    # 1. Прямий Anthropic API
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        try:
+            req_data = json.dumps({
+                "model": model,
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": target_prompt}]
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=req_data,
+                headers={
+                    "x-api-key": anthropic_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                resp_json = json.loads(resp.read().decode("utf-8"))
+                contents = resp_json.get("content", [])
+                if contents and isinstance(contents, list):
+                    output_text = "".join(c.get("text", "") for c in contents if c.get("type") == "text").strip()
+                    provider_used = f"Anthropic API ({model})"
+        except Exception as e:
+            print(f"⚠️ Anthropic API помилка/пропуск: {e}", file=sys.stderr)
+
+    # 2. OpenRouter Fallback
+    if not output_text:
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+            try:
+                req_data = json.dumps({
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "messages": [{"role": "user", "content": target_prompt}],
+                    "temperature": 0.2
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    data=req_data,
+                    headers={
+                        "Authorization": f"Bearer {openrouter_key}",
+                        "content-type": "application/json"
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    resp_json = json.loads(resp.read().decode("utf-8"))
+                    choices = resp_json.get("choices", [])
+                    if choices:
+                        output_text = choices[0].get("message", {}).get("content", "").strip()
+                        provider_used = "OpenRouter (anthropic/claude-3.5-sonnet)"
+            except Exception as e:
+                print(f"⚠️ OpenRouter Claude fallback помилка/пропуск: {e}", file=sys.stderr)
+
+    # 3. Copilot CLI Fallback (Tier 4 / 4.5 Arbiter)
+    if not output_text:
+        copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+        if os.path.exists(copilot_bin) or shutil.which("copilot"):
+            cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", target_prompt]
+            if extra_args:
+                cmd.extend(extra_args)
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                if res.returncode == 0 and res.stdout.strip():
+                    output_text = res.stdout.strip()
+                    provider_used = "GitHub Copilot CLI (Default Arbiter / Claude Sonnet Fallback)"
+                elif res.stdout.strip():
+                    output_text = res.stdout.strip()
+                    provider_used = "GitHub Copilot CLI (Fallback)"
+            except Exception as e:
+                print(f"⚠️ Copilot CLI fallback помилка: {e}", file=sys.stderr)
+
+    elapsed = round(time.time() - start_time, 2)
+    if output_text:
+        # Сесійний прапорець верифікації Claude (Brain-First + /tmp)
+        flag_content = f"CLAUDE_VERIFIED: mode={mode} provider={provider_used} elapsed={elapsed} timestamp={time.time()}\n"
+        write_session_flag("claude_verified.flag", flag_content)
+
+        print(f"\n> [!NOTE]")
+        print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
+        print(f"> - **Провайдер / Модель:** Tier 4 Claude Sonnet ({provider_used})")
+        print(f"> - **Час інференсу:** {elapsed} с")
+        print(f"> - **Отриманий вердикт / результат:** SUCCESS\n")
+        return output_text
+    else:
+        print(f"❌ Жоден із провайдерів Tier 4 Claude Sonnet не зміг відповісти за {elapsed} с.", file=sys.stderr)
+        return "CLAUDE_ALL_PROVIDERS_FAILED"
+
 def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = None) -> str:
     """Нативний інференс через GitHub Copilot CLI (Tier 4.5 Pre-Release Arbiter / Policy v0.9.7)."""
     copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
@@ -404,11 +530,7 @@ def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = No
 
         # Фіксація сесійного прапорця виконання для перевірки провененсу (лише при успіху)
         if res.returncode == 0:
-            try:
-                with open("/tmp/antigravity_copilot_executed.flag", "w", encoding="utf-8") as f_cop:
-                    f_cop.write(f"COPILOT_EXECUTED at {time.time()} elapsed={elapsed} code={res.returncode}\n")
-            except Exception:
-                pass
+            write_session_flag("copilot_executed.flag", f"COPILOT_EXECUTED at {time.time()} elapsed={elapsed} code={res.returncode}\n")
 
         print(f"\n> [!NOTE]")
         print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
@@ -468,16 +590,31 @@ def pre_audit_code_file(file_path: str) -> bool:
         return False
 
 def check_all_ai_agents(model_ollama: str = "qwen2.5-coder:1.5b", model_groq: str = "openai/gpt-oss-120b") -> int:
-    """Комплексна перевірка зв'язку та інференсу з усіма провайдерами ШІ (Tier 1 Ollama + Tier 2 Groq)."""
-    print_section("Комплексна перевірка ШІ-агентів (Tier 1 & Tier 2 Pre-flight)")
+    """Комплексна перевірка зв'язку та інференсу з ШІ-матрицею (4-Tier AI Battle Test v0.9.9)."""
+    print_section("4-Tier AI Battle Test (Tier 1, Tier 2, Tier 4, Tier 4.5)")
     
-    print(f"🔹 [1/2] Тест інференсу Local Ollama ({model_ollama})...")
+    print(f"🔹 [1/4] Тест інференсу Local Ollama ({model_ollama})...")
     res_ollama = query_ollama_engine("Ping: confirm status in 5 words", model=model_ollama)
     print(f"Відповідь Ollama: {res_ollama}\n")
     
-    print(f"🔹 [2/2] Тест інференсу Groq Cloud LPU ({model_groq})...")
+    print(f"🔹 [2/4] Тест інференсу Groq Cloud LPU ({model_groq})...")
     res_groq = query_groq_engine("Ping: confirm status in 5 words", model=model_groq)
     print(f"Відповідь Groq: {res_groq}\n")
+
+    print("🔹 [3/4] Тест готовності Tier 4 Claude Sonnet Arbiter...")
+    res_claude = query_claude_engine("Ping: confirm status in 5 words", mode="query")
+    print(f"Відповідь Claude Sonnet: {res_claude}\n")
+
+    print("🔹 [4/4] Тест доступності Tier 4.5 GitHub Copilot CLI...")
+    copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+    if os.path.exists(copilot_bin) or shutil.which("copilot"):
+        try:
+            ver = subprocess.run([copilot_bin, "--version"], capture_output=True, text=True, timeout=5)
+            print(f"Версія Copilot CLI: {ver.stdout.strip() or ver.stderr.strip()}\n")
+        except Exception as e:
+            print(f"⚠️ Помилка виклику Copilot CLI: {e}\n")
+    else:
+        print("⚠️ GitHub Copilot CLI не знайдено на системному шляху.\n")
     
     return 0
 
@@ -643,11 +780,7 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
             subprocess.run(cmd)
 
         # Створення сесійного прапорця валідації
-        try:
-            with open("/tmp/antigravity_ollama_synthesized.flag", "w", encoding="utf-8") as f_flag:
-                f_flag.write(f"SYNTHESIZED: {abs_out} model={active_model} tier={active_tier} eval_count={eval_count} timestamp={time.time()}\n")
-        except Exception:
-            pass
+        write_session_flag("ollama_synthesized.flag", f"SYNTHESIZED: {abs_out} model={active_model} tier={active_tier} eval_count={eval_count} timestamp={time.time()}\n")
 
         print(f"👉 Для виконання запустіть:\n   python3 {os.path.abspath(__file__)} --run {abs_out}")
         return 0
@@ -689,6 +822,11 @@ def main():
     parser.add_argument("--copilot-query", type=str, help="Запит до GitHub Copilot CLI")
     parser.add_argument("--copilot-audit", type=str, help="Аудит файлу через GitHub Copilot CLI")
     parser.add_argument("--copilot-refactor", type=str, help="Монолітний рефакторинг через GitHub Copilot CLI")
+
+    # Claude Sonnet Arbiter (Tier 4 / Policy v0.9.9)
+    parser.add_argument("--sonnet-query", type=str, help="Запит до Claude Sonnet (Tier 4 Arbiter)")
+    parser.add_argument("--sonnet-audit", type=str, help="Аудит плану або коду через Claude Sonnet (Phase 2.5 Pre-Approval Gate)")
+    parser.add_argument("--sonnet-precheck", type=str, help="Pre-Execution валідація контексту через Claude Sonnet (Phase 4.1)")
 
     # Семантичний контроль та детерміністичний аудит (Policy v0.9.7)
     parser.add_argument("--max-words", type=int, default=None, help="Обмеження максимальної кількості слів у відповіді")
@@ -799,6 +937,41 @@ def main():
 
     if args.copilot_refactor:
         res = query_copilot_engine(args.copilot_refactor, mode="refactor")
+        print(res)
+        return 0
+
+    # 5.1b. Claude Sonnet запити (Tier 4 Arbiter / Policy v0.9.9)
+    if args.sonnet_query:
+        print_section("Claude Sonnet Інференс (Tier 4)")
+        res = query_claude_engine(args.sonnet_query, mode="query")
+        if args.max_words:
+            check_semantic_constraints(res, max_words=args.max_words)
+        print(res)
+        return 0
+
+    if args.sonnet_audit:
+        print_section(f"Claude Sonnet Phase 2.5 Pre-Approval Audit: {args.sonnet_audit}")
+        audit_content = args.sonnet_audit
+        if os.path.isfile(args.sonnet_audit):
+            try:
+                with open(args.sonnet_audit, "r", encoding="utf-8") as f_aud:
+                    audit_content = f_aud.read()
+            except Exception as e:
+                print(f"⚠️ Не вдалося прочитати файл для аудиту: {e}", file=sys.stderr)
+        res = query_claude_engine(audit_content, mode="audit")
+        print(res)
+        return 0
+
+    if args.sonnet_precheck:
+        print_section(f"Claude Sonnet Phase 4.1 Pre-Execution Check: {args.sonnet_precheck}")
+        precheck_content = args.sonnet_precheck
+        if os.path.isfile(args.sonnet_precheck):
+            try:
+                with open(args.sonnet_precheck, "r", encoding="utf-8") as f_pre:
+                    precheck_content = f_pre.read()
+            except Exception as e:
+                print(f"⚠️ Не вдалося прочитати файл для перевірки: {e}", file=sys.stderr)
+        res = query_claude_engine(precheck_content, mode="precheck")
         print(res)
         return 0
 

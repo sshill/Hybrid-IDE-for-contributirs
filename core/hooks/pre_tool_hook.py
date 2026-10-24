@@ -53,11 +53,92 @@ def main():
     args = tool_call.get("args") or tool_call.get("arguments") or {}
     workspace_paths = data.get("workspacePaths", [])
 
+    # ІЗОЛЯЦІЯ СТАНУ ЗА СЕСІЄЮ ТА ВОРКСПЕЙСОМ (Kernel v0.9.9 Brain-First State):
+    conv_id = data.get("conversationId") or data.get("conversation_id") or ""
+    artifact_dir = data.get("artifactDirectoryPath") or ""
+
+    if conv_id:
+        sess_id = hashlib.sha256(conv_id.encode("utf-8")).hexdigest()[:8]
+    elif workspace_paths and workspace_paths[0]:
+        sess_id = hashlib.sha256(workspace_paths[0].encode("utf-8")).hexdigest()[:8]
+    elif "Cwd" in args:
+        sess_id = hashlib.sha256(args["Cwd"].encode("utf-8")).hexdigest()[:8]
+    else:
+        sess_id = hashlib.sha256(os.getcwd().encode("utf-8")).hexdigest()[:8]
+
+    brain_state_dir = None
+    brain_root = os.path.realpath(os.path.expanduser("~/.gemini/antigravity/brain"))
+    if artifact_dir and os.path.exists(artifact_dir):
+        real_art = os.path.realpath(artifact_dir)
+        if real_art == brain_root or real_art.startswith(brain_root + os.sep):
+            brain_state_dir = os.path.join(real_art, ".system_generated")
+    elif conv_id:
+        clean_conv = os.path.basename(str(conv_id).strip("/\\"))
+        if clean_conv and clean_conv not in (".", ".."):
+            clean_conv = "".join(c for c in clean_conv if c.isalnum() or c in ("-", "_", "."))
+            if clean_conv:
+                cand_dir = os.path.join(brain_root, clean_conv, ".system_generated")
+                brain_state_dir = cand_dir
+    else:
+        if os.path.exists(brain_root):
+            try:
+                cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+                if cands:
+                    cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                    brain_state_dir = os.path.join(cands[0], ".system_generated")
+            except Exception:
+                pass
+
+    if brain_state_dir:
+        try:
+            os.makedirs(brain_state_dir, exist_ok=True)
+        except Exception:
+            pass
+
+    # Brain-First ізольовані шляхи стану
+    brain_phase4_flag = os.path.join(brain_state_dir, "phase4_active.flag") if brain_state_dir else None
+    brain_contract_file = os.path.join(brain_state_dir, "phase4_contract.json") if brain_state_dir else None
+    brain_history_file = os.path.join(brain_state_dir, "action_history.json") if brain_state_dir else None
+    brain_step_file = os.path.join(brain_state_dir, "phase4_steps.txt") if brain_state_dir else None
+    brain_telemetry_flag = os.path.join(brain_state_dir, "telemetry.flag") if brain_state_dir else None
+    brain_claude_flag = os.path.join(brain_state_dir, "claude_verified.flag") if brain_state_dir else None
+    brain_copilot_flag = os.path.join(brain_state_dir, "copilot_executed.flag") if brain_state_dir else None
+    brain_copilot_auth_flag = os.path.join(brain_state_dir, "copilot_authorized.flag") if brain_state_dir else None
+    brain_ledger = os.path.join(brain_state_dir, "provenance_ledger.json") if brain_state_dir else None
+
+    # Fallback /tmp шляхи
+    phase4_flag = f"/tmp/antigravity_phase4_{sess_id}.flag"
+    legacy_phase4_flag = "/tmp/antigravity_phase4_active.flag"
+    contract_file = f"/tmp/antigravity_phase4_contract_{sess_id}.json"
+    legacy_contract_file = "/tmp/antigravity_phase4_contract.json"
+    history_file = f"/tmp/antigravity_action_history_{sess_id}.json"
+    step_file = f"/tmp/antigravity_phase4_steps_{sess_id}.txt"
+    legacy_step_file = "/tmp/antigravity_phase4_steps.txt"
+    telemetry_flag = f"/tmp/antigravity_telemetry_{sess_id}.flag"
+    legacy_telemetry_flag = "/tmp/antigravity_telemetry_inspected.flag"
+
+    all_telemetry_flags = [f for f in (brain_telemetry_flag, telemetry_flag, legacy_telemetry_flag) if f]
+    all_phase4_flags = [f for f in (brain_phase4_flag, phase4_flag, legacy_phase4_flag) if f]
+    all_contract_files = [f for f in (brain_contract_file, contract_file, legacy_contract_file) if f]
+    all_history_files = [f for f in (brain_history_file, history_file, "/tmp/antigravity_action_history.json") if f]
+    all_step_files = [f for f in (brain_step_file, step_file, legacy_step_file) if f]
+    all_claude_flags = [f for f in (brain_claude_flag, "/tmp/antigravity_claude_verified.flag") if f]
+    all_copilot_flags = [f for f in (brain_copilot_flag, brain_copilot_auth_flag, "/tmp/antigravity_copilot_executed.flag", "/tmp/antigravity_copilot_authorized.flag") if f]
+
     # ============================================================
     # 0. HARD DENY GATE: Залізний бар'єр заборонених деструктивних команд
     # ============================================================
     if name == "run_command":
         cmd_line = args.get("CommandLine", "")
+
+        # Авто-актуалізація прапорця телеметрії при запуску phase1_inspect.py --telemetry
+        if "phase1_inspect.py" in cmd_line and "--telemetry" in cmd_line:
+            try:
+                for tf_path in all_telemetry_flags:
+                    with open(tf_path, "w", encoding="utf-8") as tf:
+                        json.dump({"sess_id": sess_id, "timestamp": time.time(), "status": "inspected"}, tf)
+            except Exception:
+                pass
         # HARD DENY GATE: Заборона сліпого шелл-краулінгу через ls/dir (Git & Index First v0.9.0)
         clean_cmd = cmd_line.strip().strip("\"'").strip()
         cmd_tokens = [t.strip("\"'") for t in clean_cmd.split()]
@@ -110,20 +191,18 @@ def main():
 
         # Захист від фальсифікації верифікації моделями ШІ (GEMINI.md Розділ 2.3)
         if "commit" in cmd_line and "verified: claude" in cmd_line.lower():
-            claude_flag = "/tmp/antigravity_claude_verified.flag"
-            if not os.path.exists(claude_flag):
+            if not any(os.path.exists(cf) for cf in all_claude_flags):
                 log(f"HARD DENY: unverified claude attribution in commit")
                 res = {
                     "decision": "deny",
-                    "reason": "HARD GATE VIOLATION (GEMINI.md Section 2.3): Заборонено вказувати '[verified: claude...]' у повідомленні коміту без реального інференсу/виклику субагента Claude Sonnet 5.5."
+                    "reason": "HARD GATE VIOLATION (GEMINI.md Section 2.3): Заборонено вказувати '[verified: claude...]' у повідомленні коміту без реального інференсу/виклику субагента Claude Sonnet."
                 }
                 print(json.dumps(res))
                 return
 
         # Захист від фальсифікації аудиту Copilot CLI (Policy v0.9.7)
         if "commit" in cmd_line and "audited: copilot-cli" in cmd_line.lower():
-            copilot_flag = "/tmp/antigravity_copilot_executed.flag"
-            if not (os.path.exists(copilot_flag) or os.path.exists("/tmp/antigravity_copilot_authorized.flag")):
+            if not any(os.path.exists(cf) for cf in all_copilot_flags):
                 log(f"HARD DENY: unverified copilot-cli attribution in commit")
                 res = {
                     "decision": "deny",
@@ -153,15 +232,14 @@ def main():
 
         # ============================================================
         # COPILOT HEAVY-ONLY ESCALATION GATE (Policy v0.9.7):
-        # Дозволено виключно при: (1) прапорці /tmp/antigravity_copilot_authorized.flag (+ у чаті),
+        # Дозволено виключно при: (1) прапорці /tmp/antigravity_copilot_authorized.flag або brain (+ у чаті),
         # (2) /tmp/antigravity_audit_failed.flag, (3) цільовому рефакторингу кодової бази (--heavy-refactor).
         # ============================================================
         if "copilot" in cmd_line:
             is_copilot_cli = any(tok in ("copilot", "/home/hills/.local/bin/copilot") for tok in cmd_line.split())
             if is_copilot_cli and not ("copilot help" in cmd_line or "copilot --version" in cmd_line or "copilot /login" in cmd_line):
-                copilot_auth_flag = "/tmp/antigravity_copilot_authorized.flag"
-                authorized = os.path.exists(copilot_auth_flag)
-                audit_failed = os.path.exists("/tmp/antigravity_audit_failed.flag")
+                authorized = any(os.path.exists(f) for f in (brain_copilot_auth_flag, "/tmp/antigravity_copilot_authorized.flag") if f)
+                audit_failed = any(os.path.exists(f) for f in (os.path.join(brain_state_dir, "audit_failed.flag") if brain_state_dir else None, "/tmp/antigravity_audit_failed.flag") if f)
                 heavy_refactor = "--heavy-refactor" in cmd_line or "рефакторинг" in cmd_line.lower() or "wholesale" in cmd_line.lower()
                 if not (authorized or audit_failed or heavy_refactor):
                     log(f"HARD DENY: Copilot invoked without authorization: {cmd_line}")
@@ -258,24 +336,11 @@ def main():
     # 3. HARD DENY GATE: Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4 / v0.9.8)
     # ============================================================
     # ІЗОЛЯЦІЯ СТАНУ ЗА СЕСІЄЮ ТА ВОРКСПЕЙСОМ (Kernel v0.9.8 Session Namespace):
-    ws_id = ""
-    if workspace_paths and workspace_paths[0]:
-        ws_id = hashlib.sha256(workspace_paths[0].encode("utf-8")).hexdigest()[:8]
-    elif "Cwd" in args:
-        ws_id = hashlib.sha256(args["Cwd"].encode("utf-8")).hexdigest()[:8]
-    else:
-        ws_id = hashlib.sha256(os.getcwd().encode("utf-8")).hexdigest()[:8]
+    # Змінні sess_id, phase4_flag, step_file, contract_file, history_file, telemetry_flag ініціалізовано на початку main()
 
-    phase4_flag = f"/tmp/antigravity_phase4_{ws_id}.flag"
-    legacy_phase4_flag = "/tmp/antigravity_phase4_active.flag"
-    contract_file = f"/tmp/antigravity_phase4_contract_{ws_id}.json"
-    legacy_contract_file = "/tmp/antigravity_phase4_contract.json"
-    history_file = f"/tmp/antigravity_action_history_{ws_id}.json"
-    step_file = f"/tmp/antigravity_phase4_steps_{ws_id}.txt"
-    legacy_step_file = "/tmp/antigravity_phase4_steps.txt"
 
     # Авто-скидання застарілого лічильника кроків (TTL 15 хв бездіяльності)
-    for s_file in (step_file, legacy_step_file):
+    for s_file in all_step_files:
         if os.path.exists(s_file):
             try:
                 if (time.time() - os.path.getmtime(s_file)) > 900:
@@ -291,7 +356,7 @@ def main():
     max_identical = 2
 
     # 1. Спроба завантаження з json-контракту
-    for c_file in (contract_file, legacy_contract_file):
+    for c_file in all_contract_files:
         if os.path.exists(c_file):
             try:
                 with open(c_file, "r", encoding="utf-8") as cf:
@@ -334,12 +399,14 @@ def main():
     action_hash = hashlib.sha256(action_key.encode("utf-8")).hexdigest()[:12]
 
     action_history = []
-    if os.path.exists(history_file):
-        try:
-            with open(history_file, "r", encoding="utf-8") as hf:
-                action_history = json.load(hf)
-        except Exception:
-            action_history = []
+    for h_file in all_history_files:
+        if os.path.exists(h_file):
+            try:
+                with open(h_file, "r", encoding="utf-8") as hf:
+                    action_history = json.load(hf)
+                    break
+            except Exception:
+                action_history = []
 
     recent_hashes = [item.get("hash") for item in action_history[-loop_window:]]
     if recent_hashes:
@@ -370,11 +437,12 @@ def main():
             return
 
     action_history.append({"hash": action_hash, "action": action_key[:80], "time": time.time()})
-    try:
-        with open(history_file, "w", encoding="utf-8") as hf:
-            json.dump(action_history[-20:], hf)
-    except Exception:
-        pass
+    for h_file in all_history_files:
+        try:
+            with open(h_file, "w", encoding="utf-8") as hf:
+                json.dump(action_history[-20:], hf)
+        except Exception:
+            pass
 
     # Б. Контроль відхилення від плану (Plan Divergence Gate)
     if name in ("write_to_file", "replace_file_content"):
@@ -412,13 +480,13 @@ def main():
                     return
 
     # В. Динамічний ліміт кроків Фази 4 (Dynamic Step Budget)
-    is_phase4_active = os.path.exists(phase4_flag) or os.path.exists(legacy_phase4_flag)
+    is_phase4_active = any(os.path.exists(pf) for pf in all_phase4_flags)
     if is_phase4_active:
         # Автоматичне скидання прапорців Фази 4 при створенні коміту
         if name == "run_command":
             cmd = args.get("CommandLine", "").strip()
             if cmd.startswith("git commit"):
-                for f_clean in (phase4_flag, legacy_phase4_flag, step_file, legacy_step_file):
+                for f_clean in (all_phase4_flags + all_step_files):
                     if os.path.exists(f_clean):
                         try:
                             os.remove(f_clean)
@@ -426,13 +494,14 @@ def main():
                             pass
 
         step_count = 0
-        active_step_file = step_file if os.path.exists(step_file) else (legacy_step_file if os.path.exists(legacy_step_file) else step_file)
-        if os.path.exists(active_step_file):
-            try:
-                with open(active_step_file, "r") as f:
-                    step_count = int(f.read().strip())
-            except Exception:
-                step_count = 0
+        for sf in all_step_files:
+            if os.path.exists(sf):
+                try:
+                    with open(sf, "r") as f:
+                        step_count = int(f.read().strip())
+                        break
+                except Exception:
+                    pass
 
         is_diag_cmd = False
         if name == "run_command":
@@ -442,11 +511,12 @@ def main():
         is_read_only = (name in ("view_file", "list_dir", "grep_search", "find_by_name")) or is_diag_cmd
         if not is_read_only:
             step_count += 1
-            try:
-                with open(active_step_file, "w") as f:
-                    f.write(str(step_count))
-            except Exception:
-                pass
+            for sf in all_step_files:
+                try:
+                    with open(sf, "w") as f:
+                        f.write(str(step_count))
+                except Exception:
+                    pass
 
         if step_count > dynamic_budget:
             log(f"HARD DENY: Phase 4 dynamic step budget exceeded (steps={step_count} > {dynamic_budget})")
@@ -600,9 +670,41 @@ def main():
             normalized = target_file.replace("\\", "/").lower()
             base_name = os.path.basename(normalized)
 
-            # 1. Документація, плани, звіти, конфігурації та системні артефакти (Policy v0.9.3)
+            # ============================================================
+            # PHASE 1 TELEMETRY GATE (Kernel v0.9.8): Блокування Фази 2 та мутацій без телеметрії
+            # ============================================================
             controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java", ".psc")
             is_code_file = any(normalized.endswith(ext) for ext in controlled_code_exts)
+            is_plan_artifact = base_name == "implementation_plan.md"
+
+            if is_plan_artifact or is_code_file:
+                has_telemetry = False
+                for tf_path in all_telemetry_flags:
+                    if os.path.exists(tf_path):
+                        try:
+                            if (time.time() - os.path.getmtime(tf_path)) < 1800:
+                                has_telemetry = True
+                                break
+                        except Exception:
+                            pass
+                if not has_telemetry:
+                    log(f"HARD DENY: Telemetry Gate blocked {name} on '{target_file}' - telemetry not inspected")
+                    res = {
+                        "decision": "deny",
+                        "reason": (
+                            "HARD GATE VIOLATION (Phase 1 Telemetry Gate v0.9.8):\n"
+                            f"Виклик '{name}' для '{target_file}' заблоковано!\n"
+                            "Згідно з Регламентом v0.9.8, перехід до планування (Фаза 2) або модифікація файлів коду "
+                            "вимагає попереднього обов'язкового виміру 2D-телеметрії контексту сесії.\n"
+                            "Виконайте обов'язкову команду:\n"
+                            "python3 core/inspect/phase1_inspect.py --telemetry\n"
+                            "після чого повторіть дію."
+                        )
+                    }
+                    print(json.dumps(res))
+                    return
+
+            # 1. Документація, плани, звіти, конфігурації та системні артефакти (Policy v0.9.3)
 
             # Безумовні артефакти життєвого циклу оркестратора (Policy v0.9.3: Правило 2 файлів)
             is_lifecycle_artifact = (
@@ -621,10 +723,11 @@ def main():
                 content_len = len(args.get("CodeContent", "")) or len(args.get("ReplacementContent", ""))
                 # Якщо обсяг нового контенту або заміни > 1500 байт — вимагається реєстрація провененсу
                 if content_len > 1500:
-                    ledger_paths = [
+                    ledger_paths = [p for p in (
+                        brain_ledger,
                         "/tmp/antigravity_provenance_ledger.json",
                         "/home/hills/Documents/.agents/.provenance_ledger.json"
-                    ]
+                    ) if p]
                     has_doc_entry = False
                     abs_target = os.path.abspath(target_file)
                     for lp in ledger_paths:
@@ -657,22 +760,20 @@ def main():
             # Автоматичне керування життєвим циклом Фази 4 через ключові артефакти
             if base_name == "implementation_plan.md":
                 try:
-                    with open("/tmp/antigravity_phase4_active.flag", "w") as pf:
-                        pf.write("active")
-                    with open("/tmp/antigravity_phase4_steps.txt", "w") as sf:
-                        sf.write("0")
-                    if os.path.exists("/tmp/antigravity_action_history.json"):
-                        os.remove("/tmp/antigravity_action_history.json")
+                    for pf_path in all_phase4_flags:
+                        with open(pf_path, "w") as pf:
+                            pf.write("active")
+                    for sf_path in all_step_files:
+                        with open(sf_path, "w") as sf:
+                            sf.write("0")
+                    for hf_path in all_history_files:
+                        if os.path.exists(hf_path):
+                            os.remove(hf_path)
                 except Exception:
                     pass
             elif base_name == "walkthrough.md":
                 try:
-                    for f_to_clean in (
-                        "/tmp/antigravity_phase4_active.flag",
-                        "/tmp/antigravity_phase4_steps.txt",
-                        "/tmp/antigravity_phase4_contract.json",
-                        "/tmp/antigravity_action_history.json"
-                    ):
+                    for f_to_clean in (all_phase4_flags + all_step_files + all_contract_files + all_history_files):
                         if os.path.exists(f_to_clean):
                             os.remove(f_to_clean)
                 except Exception:
@@ -691,10 +792,11 @@ def main():
                 if repl_content:
                     content_hashes.append(hashlib.sha256(repl_content.encode("utf-8")).hexdigest())
 
-                ledger_paths = [
+                ledger_paths = [p for p in (
+                    brain_ledger,
                     "/tmp/antigravity_provenance_ledger.json",
                     "/home/hills/Documents/.agents/.provenance_ledger.json"
-                ]
+                ) if p]
                 ledger = {}
                 for lp in ledger_paths:
                     if os.path.exists(lp):
@@ -723,11 +825,14 @@ def main():
                 # Перевірка сесійних прапорців валідації/синтезу
                 if not authorized:
                     for flag_path in (
+                        os.path.join(brain_state_dir, "provenance_valid.flag") if brain_state_dir else None,
+                        os.path.join(brain_state_dir, "ollama_synthesized.flag") if brain_state_dir else None,
+                        brain_copilot_flag,
                         "/tmp/antigravity_provenance_valid.flag",
                         "/tmp/antigravity_ollama_synthesized.flag",
                         "/tmp/antigravity_copilot_executed.flag"
                     ):
-                        if os.path.exists(flag_path):
+                        if flag_path and os.path.exists(flag_path):
                             try:
                                 with open(flag_path, "r", encoding="utf-8") as vf:
                                     flag_txt = vf.read()
@@ -739,7 +844,7 @@ def main():
 
                 # Для файлів ядра фреймворку (Hybrid-IDE / .agents / Antigravity_Mgr):
                 # якщо Фаза 4 активна за затвердженим планом (implementation_plan.md)
-                if not authorized and os.path.exists("/tmp/antigravity_phase4_active.flag"):
+                if not authorized and any(os.path.exists(pf) for pf in all_phase4_flags):
                     is_core_maintenance = (
                         "/core/" in abs_target or
                         "/.agents/" in abs_target or

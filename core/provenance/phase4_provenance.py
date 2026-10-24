@@ -19,7 +19,29 @@ import time
 sys.dont_write_bytecode = True
 
 LEDGER_PATH = "/tmp/antigravity_provenance_ledger.json"
-PERSISTENT_LEDGER_PATH = "/home/hills/Documents/.agents/.provenance_ledger.json"
+PERSISTENT_LEDGER_PATH = os.environ.get("HYBRID_IDE_LEDGER", "/home/hills/Documents/.agents/.provenance_ledger.json")
+
+def resolve_brain_state_dir() -> str:
+    """Визначає персистентний Brain-First каталог стану сесії."""
+    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+    if os.path.exists(brain_root):
+        try:
+            cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+            if cands:
+                cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                sg = os.path.join(cands[0], ".system_generated")
+                os.makedirs(sg, exist_ok=True)
+                return sg
+        except Exception:
+            pass
+    return None
+
+def resolve_brain_ledger_path() -> str:
+    """Визначає персистентний Brain-First шлях леджера провененсу."""
+    sg = resolve_brain_state_dir()
+    if sg:
+        return os.path.join(sg, "provenance_ledger.json")
+    return None
 
 def get_file_sha256(path: str) -> str:
     """Обчислення SHA256 хешу файлу."""
@@ -34,11 +56,19 @@ def get_content_sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 def load_ledger() -> dict:
-    """Завантаження реєстру з пріоритетом /tmp та автоматичним відновленням із персистентного сховища."""
+    """Завантаження реєстру з Brain-First сховища, /tmp та автоматичним відновленням із персистентного сховища."""
     ledger = {}
     if os.path.exists(PERSISTENT_LEDGER_PATH):
         try:
             with open(PERSISTENT_LEDGER_PATH, "r", encoding="utf-8") as f:
+                ledger.update(json.load(f))
+        except Exception:
+            pass
+
+    brain_ledger = resolve_brain_ledger_path()
+    if brain_ledger and os.path.exists(brain_ledger):
+        try:
+            with open(brain_ledger, "r", encoding="utf-8") as f:
                 ledger.update(json.load(f))
         except Exception:
             pass
@@ -52,8 +82,13 @@ def load_ledger() -> dict:
     return ledger
 
 def save_ledger(ledger: dict):
-    """Синхронне атомарне збереження реєстру в /tmp та у персистентне сховище .agents/."""
-    for path in (LEDGER_PATH, PERSISTENT_LEDGER_PATH):
+    """Синхронне атомарне збереження реєстру в Brain-First, /tmp та у персистентне сховище .agents/."""
+    targets = [PERSISTENT_LEDGER_PATH, LEDGER_PATH]
+    brain_ledger = resolve_brain_ledger_path()
+    if brain_ledger:
+        targets.insert(0, brain_ledger)
+
+    for path in targets:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             tmp_path = path + f".tmp.{os.getpid()}"
@@ -130,10 +165,18 @@ def register_provenance(
         ledger[abs_path] = entry
         save_ledger(ledger)
 
-        # Створення сесійного прапорця валідації
+        # Створення сесійного прапорця валідації (Brain-First + /tmp)
+        valid_text = f"PROVENANCE_VALID: {abs_path} at {time.time()} by {model}\n"
+        sg = resolve_brain_state_dir()
+        if sg:
+            try:
+                with open(os.path.join(sg, "provenance_valid.flag"), "w", encoding="utf-8") as bf:
+                    bf.write(valid_text)
+            except Exception:
+                pass
         try:
             with open("/tmp/antigravity_provenance_valid.flag", "w", encoding="utf-8") as flag_f:
-                flag_f.write(f"PROVENANCE_VALID: {abs_path} at {time.time()} by {model}\n")
+                flag_f.write(valid_text)
         except Exception:
             pass
 
