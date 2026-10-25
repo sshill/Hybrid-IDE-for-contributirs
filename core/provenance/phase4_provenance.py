@@ -1,28 +1,58 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
+sys.dont_write_bytecode = True
+
 """
 Фаза 4: Сесійний реєстр провененсу та Anti-Shadow Execution Gate.
-Шлях: /home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py
+Шлях: core/provenance/phase4_provenance.py
 Стандарт: SLSA / in-toto Cryptographic Attestation (Zero-Dep stdlib).
 Гарантує, що жоден виконуваний скрипт не підкинуто в обхід моделей ШІ.
 """
 
 import argparse
+from contextlib import contextmanager
 import fcntl
 import hashlib
+import hmac
 import json
 import os
+import re
+import shutil
 import subprocess
-import sys
 import time
+import uuid
 
-sys.dont_write_bytecode = True
+SCHEMA_VERSION = "1.2"
+V0_9_11_CUTOVER_TIMESTAMP = 1793050000.0
 
-LEDGER_PATH = "/tmp/antigravity_provenance_ledger.json"
-PERSISTENT_LEDGER_PATH = os.environ.get("HYBRID_IDE_LEDGER", "/home/hills/Documents/.agents/.provenance_ledger.json")
+GENERATIVE_MODELS_ALLOWLIST = {
+    "qwen2.5-coder:1.5b": 1,
+    "qwen2.5-coder:3b": 1,
+    "qwen2.5-coder:7b": 1,
+    "openai/gpt-oss-120b": 2,
+    "gpt-oss-120b": 2,
+}
+
+RESERVED_TTL_SECONDS = 120.0
+
+def resolve_persistent_ledger_path() -> str:
+    if "HYBRID_IDE_LEDGER" in os.environ:
+        return os.environ["HYBRID_IDE_LEDGER"]
+    plugin_ledger = os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/.provenance_ledger.json")
+    agents_ledger = os.path.expanduser("~/Documents/.agents/.provenance_ledger.json")
+    if os.path.exists(os.path.dirname(agents_ledger)):
+        return agents_ledger
+    return plugin_ledger
+
+PERSISTENT_LEDGER_PATH = resolve_persistent_ledger_path()
 
 def resolve_brain_state_dir() -> str:
     """Визначає персистентний Brain-First каталог стану сесії."""
+    if "HYBRID_IDE_BRAIN_DIR" in os.environ and os.path.isdir(os.environ["HYBRID_IDE_BRAIN_DIR"]):
+        sg = os.path.join(os.environ["HYBRID_IDE_BRAIN_DIR"], ".system_generated")
+        os.makedirs(sg, exist_ok=True)
+        return sg
     brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
     if os.path.exists(brain_root):
         try:
@@ -43,6 +73,15 @@ def resolve_brain_ledger_path() -> str:
         return os.path.join(sg, "provenance_ledger.json")
     return None
 
+def resolve_brain_flags_dir() -> str:
+    """Визначає персистентний Brain-First каталог прапорців сесії."""
+    sg = resolve_brain_state_dir()
+    if sg:
+        fd = os.path.join(sg, "flags")
+        os.makedirs(fd, exist_ok=True)
+        return fd
+    return None
+
 def get_file_sha256(path: str) -> str:
     """Обчислення SHA256 хешу файлу."""
     h = hashlib.sha256()
@@ -55,54 +94,585 @@ def get_content_sha256(content: str) -> str:
     """Обчислення SHA256 хешу текстового рядка."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-def load_ledger() -> dict:
-    """Завантаження реєстру з Brain-First сховища, /tmp та автоматичним відновленням із персистентного сховища."""
-    ledger = {}
-    if os.path.exists(PERSISTENT_LEDGER_PATH):
-        try:
-            with open(PERSISTENT_LEDGER_PATH, "r", encoding="utf-8") as f:
-                ledger.update(json.load(f))
-        except Exception:
-            pass
+def simulate_replacement(
+    content_bytes: bytes,
+    target_bytes: bytes,
+    replacement_bytes: bytes,
+    start_line: int = None,
+    end_line: int = None,
+    allow_multiple: bool = False
+) -> tuple[bool, bytes, str]:
+    """
+    Єдина детерміністична байтова симуляція інструмента replace_file_content.
+    Повертає (success: bool, simulated_bytes: bytes, error_message: str).
+    """
+    if not target_bytes:
+        return False, b"", "TargetContent cannot be empty"
 
-    brain_ledger = resolve_brain_ledger_path()
-    if brain_ledger and os.path.exists(brain_ledger):
-        try:
-            with open(brain_ledger, "r", encoding="utf-8") as f:
-                ledger.update(json.load(f))
-        except Exception:
-            pass
+    if start_line is not None and end_line is not None:
+        lines = content_bytes.splitlines(keepends=True)
+        if start_line < 1 or end_line < start_line or end_line > len(lines):
+            return False, b"", f"Invalid line range [{start_line}, {end_line}] for file with {len(lines)} lines"
 
-    if os.path.exists(LEDGER_PATH):
+        slice_bytes = b"".join(lines[start_line - 1:end_line])
+        if target_bytes not in slice_bytes:
+            return False, b"", "TargetContent not found in specified line range"
+
+        count = slice_bytes.count(target_bytes)
+        if not allow_multiple and count != 1:
+            return False, b"", f"TargetContent occurs {count} times in line range (expected 1)"
+
+        new_slice = slice_bytes.replace(target_bytes, replacement_bytes, -1 if allow_multiple else 1)
+        res = b"".join(lines[:start_line - 1]) + new_slice + b"".join(lines[end_line:])
+        return True, res, "OK"
+    else:
+        if target_bytes not in content_bytes:
+            return False, b"", "TargetContent not found in file content"
+
+        count = content_bytes.count(target_bytes)
+        if not allow_multiple and count != 1:
+            return False, b"", f"TargetContent occurs {count} times in file (expected 1)"
+
+        res = content_bytes.replace(target_bytes, replacement_bytes, -1 if allow_multiple else 1)
+        return True, res, "OK"
+
+def _get_master_secret_path() -> str:
+    if "HYBRID_IDE_MASTER_SECRET" in os.environ:
+        return os.environ["HYBRID_IDE_MASTER_SECRET"]
+    return os.path.expanduser("~/.gemini/antigravity/.core_master_hmac.secret")
+
+def _get_or_create_master_hmac_secret() -> bytes:
+    """
+    Отримання або ініціалізація майстер-ключа HMAC.
+    Зберігається у ~/.gemini/antigravity/.core_master_hmac.secret з правами 0600.
+    Захист від race condition через O_CREAT | O_EXCL та перевірка прав батьківського каталогу.
+    """
+    secret_path = _get_master_secret_path()
+    parent_dir = os.path.dirname(secret_path)
+
+    if os.path.exists(parent_dir):
         try:
-            with open(LEDGER_PATH, "r", encoding="utf-8") as f:
-                ledger.update(json.load(f))
-        except Exception:
-            pass
+            st = os.stat(parent_dir)
+            if st.st_mode & 0o022:
+                raise PermissionError(
+                    f"Parent directory {parent_dir} is group/world-writable (mode {oct(st.st_mode)}). "
+                    "Refusing to load/store master secret."
+                )
+        except OSError as e:
+            raise PermissionError(f"Failed to stat secret parent dir {parent_dir}: {e}")
+    else:
+        os.makedirs(parent_dir, mode=0o700, exist_ok=True)
+
+    if os.path.isfile(secret_path):
+        st = os.stat(secret_path)
+        if hasattr(os, "getuid") and st.st_uid != os.getuid():
+            raise PermissionError(f"Secret file {secret_path} is owned by UID {st.st_uid}, expected {os.getuid()}. Refusing to load.")
+        if (st.st_mode & 0o077) != 0:
+            try:
+                os.chmod(secret_path, 0o600)
+            except OSError:
+                raise PermissionError(f"Secret file {secret_path} has insecure permissions {oct(st.st_mode)} and cannot be chmodded to 0600.")
+        with open(secret_path, "rb") as f:
+            secret = f.read().strip()
+            if not secret:
+                raise ValueError(f"Secret file {secret_path} is empty.")
+            return secret
+    else:
+        new_secret = os.urandom(32).hex().encode("utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(secret_path, flags, 0o600)
+            with open(fd, "wb") as f:
+                f.write(new_secret)
+                f.flush()
+                os.fsync(f.fileno())
+            return new_secret
+        except FileExistsError:
+            with open(secret_path, "rb") as f:
+                return f.read().strip()
+
+def derive_session_key(session_id: str) -> bytes:
+    """Деривація сесійного ключа з майстер-ключа: HMAC(MasterKey, session_id)."""
+    clean_sess = str(session_id or "").strip()
+    if not clean_sess:
+        raise ValueError("Invalid session_id: cannot derive session key for empty or missing session_id")
+    master_key = _get_or_create_master_hmac_secret()
+    return hmac.new(master_key, clean_sess.encode("utf-8"), hashlib.sha256).digest()
+
+def compute_passport_hmac(passport: dict) -> str:
+    """
+    Розрахунок криптографічного HMAC-SHA256 підпису паспорта за канонічним JSON (Schema 1.2).
+    Покриває всі критичні поля: schema_version, passport_id, session_id, file_path,
+    baseline_sha256, target_sha256, model, tier, status, created_at_us, reserved_at_us,
+    reserved_by_tool, applied_at_us, metrics.
+    """
+    session_id = str(passport.get("session_id") or "").strip()
+    session_key = derive_session_key(session_id)
+
+    created_at = passport.get("created_at") or 0.0
+    reserved_at = passport.get("reserved_at") or 0.0
+    applied_at = passport.get("applied_at") or 0.0
+
+    canonical_payload = json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "passport_id": passport.get("passport_id", ""),
+        "session_id": session_id,
+        "file_path": passport.get("file_path", ""),
+        "baseline_sha256": passport.get("baseline_sha256") or "",
+        "target_sha256": passport.get("target_sha256", ""),
+        "model": passport.get("model", ""),
+        "tier": passport.get("tier", 1),
+        "status": passport.get("status", "MINTED"),
+        "created_at_us": int(round(created_at * 1_000_000)),
+        "reserved_at_us": int(round(reserved_at * 1_000_000)) if reserved_at else 0,
+        "reserved_by_tool": passport.get("reserved_by_tool") or "",
+        "applied_at_us": int(round(applied_at * 1_000_000)) if applied_at else 0,
+        "metrics": passport.get("metrics") or {}
+    }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+    return hmac.new(session_key, canonical_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+def verify_passport_hmac(passport: dict) -> tuple[bool, str]:
+    """
+    Перевірка HMAC-підпису паспорта (Schema 1.2).
+    Fail-closed: якщо паспорт у секції passports не має підпису або підпис не збігається,
+    він безумовно відхиляється.
+    """
+    sig = passport.get("signature")
+    session_id = str(passport.get("session_id") or "").strip()
+
+    if not session_id:
+        return False, "COUNTERFEIT_PASSPORT: Missing or empty session_id"
+
+    try:
+        master_key = _get_or_create_master_hmac_secret()
+        has_local_master = True
+    except PermissionError as e:
+        return False, f"SECURITY_ERROR: {e}"
+    except Exception:
+        has_local_master = False
+
+    if not sig:
+        return False, "COUNTERFEIT_PASSPORT: Missing HMAC signature on passport"
+
+    if not has_local_master:
+        return False, "CANNOT_VERIFY: Master key missing in local environment"
+
+    expected_sig = compute_passport_hmac(passport)
+    if hmac.compare_digest(sig, expected_sig):
+        return True, "HMAC_VERIFIED"
+    else:
+        return False, "SIGNATURE_MISMATCH: Passport tamper-evidence triggered"
+
+def get_canonical_lock_path() -> str:
+    """Визначає єдиний канонічний шлях блокування реєстру провененсу."""
+    if "HYBRID_IDE_LEDGER" in os.environ:
+        return os.environ["HYBRID_IDE_LEDGER"] + ".lock"
+    brain_state = resolve_brain_state_dir()
+    if brain_state:
+        return os.path.join(brain_state, ".provenance_ledger.lock")
+    return os.path.expanduser("~/.gemini/antigravity/.provenance_ledger.lock")
+
+def _load_ledger_unlocked() -> dict:
+    """Внутрішнє завантаження реєстру (без взяття власного блокування)."""
+    ledger = {"schema_version": SCHEMA_VERSION, "passports": {}, "legacy_files": {}}
+    loaded_any = False
+
+    targets = []
+    if "HYBRID_IDE_LEDGER" in os.environ:
+        targets.append(os.environ["HYBRID_IDE_LEDGER"])
+    else:
+        brain_ledger = resolve_brain_ledger_path()
+        if brain_ledger:
+            targets.append(brain_ledger)
+        persistent_path = resolve_persistent_ledger_path()
+        if persistent_path not in targets:
+            targets.append(persistent_path)
+
+    for path in targets:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        if "passports" in data or "legacy_files" in data:
+                            ledger.update(data)
+                        else:
+                            ledger["legacy_files"].update(data)
+                        loaded_any = True
+                        break
+            except json.JSONDecodeError as e:
+                corrupt_backup = f"{path}.corrupt.{int(time.time())}"
+                try:
+                    shutil.copy2(path, corrupt_backup)
+                except Exception:
+                    pass
+                raise ValueError(
+                    f"Corrupt ledger JSON at {path} ({e}). "
+                    f"Backed up to {corrupt_backup}. Aborting to prevent state loss."
+                )
+            except Exception as e:
+                raise e
+
     return ledger
 
-def save_ledger(ledger: dict):
-    """Синхронне атомарне збереження реєстру в Brain-First, /tmp та у персистентне сховище .agents/."""
-    targets = [PERSISTENT_LEDGER_PATH, LEDGER_PATH]
-    brain_ledger = resolve_brain_ledger_path()
-    if brain_ledger:
-        targets.insert(0, brain_ledger)
+def _save_ledger_unlocked(ledger: dict):
+    """Внутрішнє атомарне збереження реєстру (без взяття власного блокування)."""
+    if "HYBRID_IDE_LEDGER" in os.environ:
+        targets = [os.environ["HYBRID_IDE_LEDGER"]]
+    else:
+        targets = []
+        brain_ledger = resolve_brain_ledger_path()
+        if brain_ledger:
+            targets.append(brain_ledger)
+        persistent_path = resolve_persistent_ledger_path()
+        if persistent_path not in targets:
+            targets.append(persistent_path)
 
     for path in targets:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             tmp_path = path + f".tmp.{os.getpid()}"
             with open(tmp_path, "w", encoding="utf-8") as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                try:
-                    json.dump(ledger, f, indent=2, ensure_ascii=False)
-                    f.flush()
-                    os.fsync(f.fileno())
-                finally:
-                    fcntl.flock(f, fcntl.LOCK_UN)
+                json.dump(ledger, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, path)
         except Exception as e:
             print(f"⚠️ Попередження: не вдалося зберегти реєстр у {path}: {e}", file=sys.stderr)
+
+@contextmanager
+def locked_ledger():
+    """
+    Канонічний атомарний контекстний менеджер для циклу read-modify-write.
+    Захоплює fcntl.flock(LOCK_EX) на весь життєвий цикл операції з леджером.
+    """
+    lock_path = get_canonical_lock_path()
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    with open(lock_path, "w") as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
+        try:
+            ledger = _load_ledger_unlocked()
+            yield ledger
+            _save_ledger_unlocked(ledger)
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+def load_ledger() -> dict:
+    """Read-only завантаження реєстру з безпечним lock."""
+    lock_path = get_canonical_lock_path()
+    if os.path.exists(lock_path):
+        try:
+            with open(lock_path, "w") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_SH)
+                try:
+                    return _load_ledger_unlocked()
+                finally:
+                    fcntl.flock(lock_f, fcntl.LOCK_UN)
+        except Exception:
+            pass
+    return _load_ledger_unlocked()
+
+def save_ledger(ledger: dict):
+    """Синхронне збереження реєстру під ексклюзивним lock."""
+    lock_path = get_canonical_lock_path()
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    with open(lock_path, "w") as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
+        try:
+            _save_ledger_unlocked(ledger)
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+def mint_passport(
+    session_id: str,
+    file_path: str,
+    baseline_sha256: str,
+    target_sha256: str,
+    model: str,
+    tier: int = None,
+    metrics: dict = None
+) -> str:
+    """Випуск активного криптографічного паспорта (MINTED) для передачі коду між фазами."""
+    if model not in GENERATIVE_MODELS_ALLOWLIST:
+        raise ValueError(
+            f"Model '{model}' is not in GENERATIVE_MODELS_ALLOWLIST. "
+            f"Only generative models {list(GENERATIVE_MODELS_ALLOWLIST.keys())} can mint passports."
+        )
+
+    clean_session_id = str(session_id or "").strip()
+    if not clean_session_id:
+        raise ValueError("Cannot mint passport: session_id is required and cannot be empty.")
+
+    resolved_tier = GENERATIVE_MODELS_ALLOWLIST[model] if tier is None else tier
+    real_path = os.path.realpath(os.path.abspath(file_path))
+    passport_id = f"pass_{uuid.uuid4().hex[:16]}"
+
+    passport = {
+        "passport_id": passport_id,
+        "schema_version": SCHEMA_VERSION,
+        "session_id": clean_session_id,
+        "file_path": real_path,
+        "baseline_sha256": baseline_sha256,
+        "target_sha256": target_sha256,
+        "model": model,
+        "tier": resolved_tier,
+        "metrics": metrics or {},
+        "created_at": time.time(),
+        "status": "MINTED",
+        "reserved_at": None,
+        "reserved_by_tool": None,
+        "applied_at": None,
+        "signature": None
+    }
+    passport["signature"] = compute_passport_hmac(passport)
+
+    with locked_ledger() as ledger:
+        passports = ledger.setdefault("passports", {})
+        passports[passport_id] = passport
+
+    print(f"🎫 [PASSPORT MINTED] ID: {passport_id} for {os.path.basename(real_path)} (target: {target_sha256[:16]}..., model: {model})")
+    return passport_id
+
+def reserve_passport(
+    session_id: str,
+    file_path: str,
+    baseline_sha256: str,
+    target_sha256: str,
+    tool_name: str
+) -> tuple[bool, str, str]:
+    """Резервування паспорта перед виконанням інструмента (pre_tool_hook)."""
+    real_path = os.path.realpath(os.path.abspath(file_path))
+    clean_session_id = str(session_id or "").strip()
+    if not clean_session_id:
+        return False, "", "Cannot reserve passport: session_id is required"
+
+    now = time.time()
+    with locked_ledger() as ledger:
+        passports = ledger.setdefault("passports", {})
+
+        # Скидання протермінованих RESERVED (TTL 120s) назад у MINTED з перепідписом!
+        for p_id, p in passports.items():
+            if p.get("status") == "RESERVED":
+                res_at = p.get("reserved_at") or 0
+                if (now - res_at) > RESERVED_TTL_SECONDS:
+                    p["status"] = "MINTED"
+                    p["reserved_at"] = None
+                    p["reserved_by_tool"] = None
+                    p["signature"] = compute_passport_hmac(p)
+
+        # Пошук валідного паспорта
+        for p_id, p in passports.items():
+            if p.get("file_path") == real_path:
+                p_target = p.get("target_sha256")
+                p_base = p.get("baseline_sha256")
+                status = p.get("status")
+
+                if p_target == target_sha256:
+                    if status == "APPLIED":
+                        return False, p_id, "Passport already APPLIED (replay prevention)"
+                    elif status == "FAILED":
+                        return False, p_id, "Passport is FAILED (must re-synthesize code in Phase 4.3)"
+
+                    if baseline_sha256 is not None and p_base is not None and p_base != baseline_sha256:
+                        continue
+
+                    if p.get("session_id") != clean_session_id:
+                        return False, p_id, f"SESSION_MISMATCH: Passport belongs to session {p.get('session_id')}, requested by {clean_session_id}"
+
+                    if status == "MINTED":
+                        ok_sig, sig_msg = verify_passport_hmac(p)
+                        if not ok_sig:
+                            return False, p_id, f"COUNTERFEIT_PASSPORT: {sig_msg}"
+
+                        p["status"] = "RESERVED"
+                        p["reserved_at"] = now
+                        p["reserved_by_tool"] = tool_name
+                        p["signature"] = compute_passport_hmac(p)
+                        return True, p_id, f"Passport {p_id} RESERVED for {tool_name}"
+
+    return False, "", f"No valid MINTED passport found for {os.path.basename(real_path)} with target SHA256 {target_sha256[:16]}..."
+
+def apply_passport(session_id: str, file_path: str) -> tuple[bool, str]:
+    """Підтвердження фактичної зміни на диску та фіксація статусу APPLIED (post_tool_hook)."""
+    real_path = os.path.realpath(os.path.abspath(file_path))
+    if not os.path.isfile(real_path):
+        return False, f"Target file does not exist on disk: {real_path}"
+
+    disk_hash = get_file_sha256(real_path)
+    clean_session_id = str(session_id or "").strip()
+
+    with locked_ledger() as ledger:
+        passports = ledger.setdefault("passports", {})
+        target_passport = None
+        for p_id, p in passports.items():
+            if p.get("file_path") == real_path and p.get("status") == "RESERVED":
+                target_passport = p
+                break
+
+        if not target_passport:
+            return False, f"No RESERVED passport found for {os.path.basename(real_path)}"
+
+        if clean_session_id and target_passport.get("session_id") != clean_session_id:
+            return False, f"SESSION_MISMATCH: Passport belongs to session {target_passport.get('session_id')}, apply requested by {clean_session_id}"
+
+        ok_sig, sig_msg = verify_passport_hmac(target_passport)
+        if not ok_sig:
+            target_passport["status"] = "FAILED"
+            target_passport["applied_at"] = time.time()
+            target_passport["signature"] = compute_passport_hmac(target_passport)
+            return False, f"FORGERY_DETECTED: RESERVED passport signature invalid: {sig_msg}"
+
+        expected_target = target_passport.get("target_sha256")
+        if disk_hash == expected_target:
+            target_passport["status"] = "APPLIED"
+            target_passport["applied_at"] = time.time()
+            target_passport["signature"] = compute_passport_hmac(target_passport)
+            print(f"✅ [PASSPORT APPLIED] {target_passport.get('passport_id')} for {os.path.basename(real_path)} verified on disk")
+            return True, f"OK: disk matches target {disk_hash[:16]}..."
+        else:
+            target_passport["status"] = "FAILED"
+            target_passport["applied_at"] = time.time()
+            target_passport["signature"] = compute_passport_hmac(target_passport)
+            print(f"🔴 [PASSPORT FAILED] Disk hash {disk_hash[:16]} does not match expected {expected_target[:16]}", file=sys.stderr)
+            return False, f"FAILED: disk hash mismatch (disk: {disk_hash[:16]}, expected: {expected_target[:16]})"
+
+def plan_authorizes(file_path: str, repo_path: str = None) -> tuple[bool, str]:
+    """
+    Єдиний детерміністичний авторизатор Contributor Mode.
+    Перевіряє, що approved_plan.sha256 збігається з implementation_plan.md
+    та цільовий файл явно перерахований у плані.
+    Повністю виключає перевірку назви каталогу (is_contributor_repo).
+    """
+    brain_state = resolve_brain_state_dir()
+    if not brain_state:
+        return False, "Brain state directory not found"
+
+    approved_sha_path = os.path.join(brain_state, "approved_plan.sha256")
+    plan_path = os.path.join(os.path.dirname(brain_state), "implementation_plan.md")
+
+    if not os.path.isfile(approved_sha_path) or not os.path.isfile(plan_path):
+        return False, "Missing approved_plan.sha256 or implementation_plan.md"
+
+    try:
+        with open(plan_path, "rb") as pf:
+            current_plan_sha = hashlib.sha256(pf.read()).hexdigest()
+        with open(approved_sha_path, "r", encoding="utf-8") as af:
+            approved_plan_sha = af.read().strip()
+
+        if current_plan_sha != approved_plan_sha:
+            return False, f"Plan hash mismatch (current: {current_plan_sha[:8]}, approved: {approved_plan_sha[:8]})"
+
+        cwd = repo_path or os.getcwd()
+        abs_target = os.path.realpath(os.path.abspath(file_path))
+        try:
+            rel_target = os.path.relpath(abs_target, cwd)
+        except ValueError:
+            rel_target = abs_target
+
+        base_target = os.path.basename(abs_target)
+
+        with open(plan_path, "r", encoding="utf-8") as pf:
+            plan_text = pf.read()
+
+        patterns = [
+            rf"\[(?:MODIFY|NEW|DELETE)\]\s+.*?(?:`|/){re.escape(base_target)}`?",
+            rf"`{re.escape(rel_target)}`",
+            rf"`{re.escape(abs_target)}`",
+            rf"\(file://[^\)]*{re.escape(base_target)}\)",
+            rf"\b{re.escape(rel_target)}\b"
+        ]
+        for pat in patterns:
+            if re.search(pat, plan_text):
+                return True, f"File authorized by approved plan ({approved_plan_sha[:8]})"
+
+        return False, f"File {rel_target} not listed in approved implementation_plan.md"
+    except Exception as e:
+        return False, f"Error validating plan authorization: {e}"
+
+def verify_chain(session_id: str = None, repo_path: str = None) -> tuple[bool, str, list]:
+    """Аудит ланцюга паспортів для Фази 4.5 (Copilot CLI) та Фази 5.1 (Commit Gate)."""
+    cwd = repo_path or os.getcwd()
+    try:
+        res = subprocess.run(
+            ["git", "-C", cwd, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+            capture_output=True,
+            timeout=15
+        )
+        if res.returncode != 0:
+            return False, f"git status failed: {res.stderr.decode('utf-8', errors='replace')}", []
+    except subprocess.TimeoutExpired:
+        return False, "git status timed out after 15s (fail-closed)", []
+    except Exception as e:
+        return False, f"Error running git: {e}", []
+
+    raw = res.stdout
+    entries = raw.split(b"\0")
+    ledger = load_ledger()
+    passports = ledger.get("passports", {})
+    verified = []
+    unverified = []
+
+    code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".psc", ".pas", ".cpp", ".h", ".go", ".rs")
+
+    idx = 0
+    while idx < len(entries):
+        entry = entries[idx]
+        idx += 1
+        if not entry:
+            continue
+        try:
+            status_code = entry[:2].decode("utf-8")
+            path_bytes = entry[3:]
+        except Exception:
+            continue
+
+        if status_code.startswith("R") or status_code.startswith("C"):
+            if idx < len(entries):
+                new_path_bytes = entries[idx]
+                idx += 1
+                rel_path = new_path_bytes.decode("utf-8", errors="replace")
+            else:
+                rel_path = path_bytes.decode("utf-8", errors="replace")
+        else:
+            rel_path = path_bytes.decode("utf-8", errors="replace")
+
+        abs_p = os.path.realpath(os.path.join(cwd, rel_path))
+        if not any(abs_p.endswith(ext) for ext in code_exts):
+            continue
+
+        if not os.path.isfile(abs_p):
+            continue
+
+        disk_hash = get_file_sha256(abs_p)
+        matched = False
+        for p_id, p in passports.items():
+            if p.get("file_path") == abs_p and p.get("status") == "APPLIED":
+                if p.get("target_sha256") == disk_hash:
+                    ok_sig, sig_msg = verify_passport_hmac(p)
+                    if not ok_sig:
+                        print(f"⚠️ [FORGERY REJECTED] Passport {p_id} for {rel_path} has invalid signature: {sig_msg}", file=sys.stderr)
+                        continue
+                    matched = True
+                    verified.append({"path": rel_path, "passport_id": p_id, "model": p.get("model")})
+                    break
+
+        if not matched:
+            ok_auth, auth_msg = plan_authorizes(abs_p, cwd)
+            if ok_auth:
+                matched = True
+                verified.append({
+                    "path": rel_path,
+                    "passport_id": "contributor_plan",
+                    "model": "contributor-mode (approved_plan)"
+                })
+
+        if not matched:
+            unverified.append(rel_path)
+
+    if unverified:
+        return False, f"Unverified code files without APPLIED passport: {', '.join(unverified)}", unverified
+    return True, f"All {len(verified)} modified code files have valid APPLIED passports", verified
 
 def register_provenance(
     script_path: str,
@@ -120,8 +690,6 @@ def register_provenance(
             return False
         sha256_hash = get_file_sha256(abs_path)
 
-    # АНТИ-ФАЛЬСИФІКАЦІЙНИЙ ШЛЮЗ (Anti-Forgery Provenance Gate v0.9.8):
-    # Забороняє фіктивну реєстрацію без реальних метрик або прапорця генератора
     is_ollama_model = any(k in model.lower() for k in ("qwen", "llama", "coder", "deepseek", "mistral", "gemma", "ollama"))
     if is_ollama_model:
         has_metrics = (eval_count is not None and eval_count > 0 and 
@@ -161,11 +729,10 @@ def register_provenance(
         entry["prompt_eval_duration_ms"] = prompt_eval_duration_ms
 
     try:
-        ledger = load_ledger()
-        ledger[abs_path] = entry
-        save_ledger(ledger)
+        with locked_ledger() as ledger:
+            legacy = ledger.setdefault("legacy_files", {})
+            legacy[abs_path] = entry
 
-        # Створення сесійного прапорця валідації (Brain-First + /tmp)
         valid_text = f"PROVENANCE_VALID: {abs_path} at {time.time()} by {model}\n"
         sg = resolve_brain_state_dir()
         if sg:
@@ -193,23 +760,14 @@ def verify_provenance(script_path: str) -> tuple[bool, str]:
         return False, f"Файл не існує: {abs_path}"
 
     ledger = load_ledger()
-    if not ledger:
-        return False, "Реєстр провененсу порожній або відсутній (перевірено /tmp та .agents/.provenance_ledger.json)."
-
-    record = ledger.get(abs_path)
+    legacy = ledger.get("legacy_files", {})
+    record = legacy.get(abs_path)
     if not record:
         return False, f"Файл не зареєстровано в сесійному реєстрі ШІ-генерації: {abs_path}"
 
     current_hash = get_file_sha256(abs_path)
     if current_hash != record.get("sha256"):
         return False, f"Порушення цілісності: хеш на диску ({current_hash[:16]}...) не збігається із зареєстрованим ШІ ({record.get('sha256', '')[:16]}...)"
-
-    # Авто-реплікація в /tmp якщо там запису ще не було
-    if not os.path.exists(LEDGER_PATH):
-        try:
-            save_ledger(ledger)
-        except Exception:
-            pass
 
     return True, f"OK (Model: {record.get('model')})"
 
@@ -219,7 +777,8 @@ def verify_content_sha256(sha256_hash: str) -> tuple[bool, str, dict]:
         return False, "Порожній хеш для перевірки.", {}
 
     ledger = load_ledger()
-    for path, entry in ledger.items():
+    legacy = ledger.get("legacy_files", {})
+    for path, entry in legacy.items():
         if entry.get("sha256") == sha256_hash:
             return True, f"OK (Model: {entry.get('model')}, Path: {path})", entry
 
@@ -253,8 +812,6 @@ def run_verified_script(script_path: str, script_args: list) -> int:
 
 def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
     """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1 / v0.9.7)."""
-    import re
-    # 1. Перевірка audited: copilot-cli (Policy v0.9.7 / v0.9.8)
     audit_match = re.search(r"audited:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
     if audit_match:
         auditor = audit_match.group(1).strip().lower()
@@ -263,7 +820,6 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
             if not os.path.exists(copilot_flag):
                 return False, f"Фальсифікація аудиту: задекларовано '[audited: {auditor}]', але виконання Copilot CLI не зафіксовано в сесії (відсутній прапорець виконання copilot_executed.flag)."
 
-    # 2. Перевірка generated: <model>
     match = re.search(r"generated:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
     if not match:
         return True, "Атрибуція ШІ відсутня в коміті (ручний або структурний коміт)."
@@ -273,11 +829,12 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
         return False, "Фальсифікація авторства: назва моделі у [generated: ...] порожня."
 
     ledger = load_ledger()
-    if not ledger:
+    legacy = ledger.get("legacy_files", {})
+    if not legacy:
         return False, f"Реєстр провененсу порожній: генерацію моделлю '{model_claimed}' не підтверджено."
 
     matched_entries = []
-    for path, entry in ledger.items():
+    for path, entry in legacy.items():
         entry_model = entry.get("model", "").strip().lower()
         if entry_model and (model_claimed == entry_model or entry_model in model_claimed or model_claimed in entry_model):
             matched_entries.append(path)
@@ -291,32 +848,17 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
     return True, f"OK (Знайдено {len(matched_entries)} зареєстрованих файлів для моделі {model_claimed})"
 
 def main():
-    parser = argparse.ArgumentParser(description="Phase 4 Provenance Ledger & Anti-Shadow Gate (Policy v0.9.1)")
-    parser.add_argument("--register", type=str, help="Зареєструвати ШІ-скрипт у сесійному реєстрі")
-    parser.add_argument("--model", type=str, default="qwen2.5-coder:1.5b", help="Модель, яка згенерувала код")
-    parser.add_argument("--hash", type=str, default=None, help="SHA256 хеш для прямої реєстрації")
-    parser.add_argument("--prompt", type=str, default=None, help="Промпт задачі, переданий моделі")
-    parser.add_argument("--eval-count", type=int, default=None, help="Кількість згенерованих токенів")
-    parser.add_argument("--duration-ms", type=float, default=None, help="Тривалість оцінки промпту у мс")
+    parser = argparse.ArgumentParser(description="Phase 4 Provenance Ledger & Anti-Shadow Gate (Policy v0.9.11)")
     parser.add_argument("--verify", type=str, help="Перевірити валідність провененсу файлу")
     parser.add_argument("--verify-hash", type=str, help="Перевірити валідність SHA256 хешу")
     parser.add_argument("--verify-commit", type=str, help="Перевірити валідність атрибуції моделі в повідомленні коміту")
+    parser.add_argument("--verify-chain", action="store_true", help="Перевірити ланцюг паспортів для змінених файлів git")
     parser.add_argument("--run", type=str, help="Запустити валідований скрипт")
     parser.add_argument("script_args", nargs="*", help="Аргументи для скрипта")
 
     args = parser.parse_args()
 
-    if args.register:
-        success = register_provenance(
-            args.register,
-            model=args.model,
-            sha256_hash=args.hash,
-            source_prompt=args.prompt,
-            eval_count=args.eval_count,
-            prompt_eval_duration_ms=args.duration_ms
-        )
-        return 0 if success else 1
-    elif args.verify:
+    if args.verify:
         valid, msg = verify_provenance(args.verify)
         print(f"Верифікація: {'🟢 PASS' if valid else '🔴 FAIL'} — {msg}")
         return 0 if valid else 1
@@ -327,6 +869,15 @@ def main():
     elif args.verify_commit:
         valid, msg = verify_commit_attribution(args.verify_commit)
         print(f"Верифікація коміту: {'🟢 PASS' if valid else '🔴 FAIL'} — {msg}")
+        return 0 if valid else 1
+    elif args.verify_chain:
+        valid, msg, items = verify_chain()
+        print(f"Аудит ланцюга паспортів: {'🟢 PASS' if valid else '🔴 FAIL'} — {msg}")
+        for it in items:
+            if isinstance(it, dict):
+                print(f"  • {it.get('path')} (Passport: {it.get('passport_id')}, Model: {it.get('model')})")
+            else:
+                print(f"  🔴 {it}")
         return 0 if valid else 1
     elif args.run:
         return run_verified_script(args.run, args.script_args)

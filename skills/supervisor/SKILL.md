@@ -17,20 +17,20 @@ description: >-
 
 ## 1. Мандат та архітектурне призначення Супервайзера
 
-Супервайзер активується для незалежного ревізійного контролю за виконанням завдань іншими агентами, сесіями чи підсистемами. Супервайзер не кодує «від себе», а проводить суворий детерміністичний аудит за стандартом 5 фаз регламенту v0.9.5.
+Супервайзер активується для незалежного ревізійного контролю за виконанням завдань іншими агентами, сесіями чи підсистемами. Супервайзер не кодує «від себе», а проводить суворий детерміністичний аудит за стандартом 5 фаз регламенту Kernel v0.9.10.
 
 ### Залізні обов'язки Супервайзера:
 1. **Крос-сесійний аудит телеметрії (Cross-Session Lineage):**
    - Прямий аналіз системного журналу транскрипту `transcript.jsonl` за наданим `Conversation ID`.
    - Пошук прихованих збоїв: відхилень команд користувачем, спрацювання аварійних вимикачів Circuit Breaker, зациклень ReAct або пропуску обов'язкових кроків.
 2. **Криптографічний контроль автентичності (SHA256 Anti-Fake Gate):**
-   - Звірка фактичних SHA256 хешів кожного зміненого/створеного робочого файлу із сесійним (`/tmp/antigravity_provenance_ledger.json`) та персистентним (`.agents/.provenance_ledger.json`) реєстрами.
-   - Виявлення фіктивних комітів: якщо в описі зазначено `[generated: <model>]`, але в реєстрі відсутній запис або не збігається хеш — це фальсифікація (Fake Provenance).
+   - Звірка фактичних SHA256 хешів кожного зміненого/створеного робочого файлу із Brain-First леджером (`<brain>/.system_generated/provenance_ledger.json`) та персистентним (`.agents/.provenance_ledger.json`) реєстрами.
+   - Виявлення фіктивних комітів: якщо в описі зазначено `[generated: <model>]`, але в реєстрі відсутній активний паспорт або не збігається хеш — це фальсифікація (Fake Provenance).
 3. **Контроль регламентних віджетів та індикаторів:**
    - Перевірка обов'язкової фіксації Індикатора навантаження контексту (`≤600 🟢`, `601–800 🟡`, `>800 🔴`) у фінальних звітах (`walkthrough.md`).
    - Перевірка дотримання стандарту §2.7 `GEMINI.md` (Dual-Layer Representation: Шар A Native Markdown Cards + Шар B Generative UI HTML Artifacts).
 4. **Контроль ланцюга виконання Фази 4:**
-   - Перевірка наявності обов'язкового звіту Арбітра `[CODE_AUDIT_REPORT]` до початку мутацій.
+   - Перевірка наявності обов'язкового паспорта (`MINTED -> RESERVED -> APPLIED`) або Contributor Mode санкції до початку мутацій.
    - Перевірка живої телеметрії віджетів у процесі роботи (ліквідація `TELEMETRY_LAG`).
 5. **Root Cause Analysis (RCA) та Матриця розбіжностей:**
    - Виявлення першопричини кожного дефекту та формування чіткої таблиці `[GAP & DISCREPANCY MATRIX]`.
@@ -44,9 +44,9 @@ description: >-
 При аудиті будь-якого коміту або пулу файлів Супервайзер виконує 3 обов'язкових кроки верифікації:
 
 1. **Розрахунок фактичного хешу на диску чи в буфері Git:**
-   - Отримання хешу через `python3 /home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py --verify <шлях>` або розрахунок SHA256.
-2. **Звірка з подвійним реєстром провененсу:**
-   - Перевірка наявності запису в `/tmp/antigravity_provenance_ledger.json` та `.agents/.provenance_ledger.json`.
+   - Отримання хешу через `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py --verify-chain` (або `core/provenance/phase4_provenance.py --verify-chain`) або розрахунок SHA256.
+2. **Звірка з Brain-First реєстром провененсу:**
+   - Перевірка наявності запису в `<brain>/.system_generated/provenance_ledger.json` та `.agents/.provenance_ledger.json`.
    - Звірка обов'язкових атрибутів: `model`, `source_prompt`, `eval_count > 0`, `prompt_eval_duration_ms > 0`.
 3. **Класифікація статусу автентичності:**
    - 🟢 **VERIFIED_AI:** Повний збіг SHA256 та наявність реального інференсу в Ledger.
@@ -91,10 +91,10 @@ description: >-
 Коли користувач вводить `/supervisor` або `/superviser` (з опціональним аргументом `Conversation ID`, шляхом до файлу чи описом):
 
 1. **Збір вхідних даних (Git-First & Transcript Access):**
-   - Якщо вказано `Conversation ID`: зчитати артефакти з `/home/hills/.gemini/antigravity/brain/<id>/` (`walkthrough.md`, `implementation_plan.md`) та системний журнал `.system_generated/logs/transcript.jsonl`.
+   - Якщо вказано `Conversation ID`: зчитати артефакти з `<artifacts_dir>/brain/<id>/` (`walkthrough.md`, `implementation_plan.md`) та системний журнал `.system_generated/logs/transcript.jsonl`.
    - Якщо вказано репозиторій або коміт: виконати `git log -n 3 --oneline` та перевірити змінені файли.
 2. **Запуск криптографічного контролю:**
-   - Перевірити провененс ключових робочих файлів через `python3 /home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py --verify <file>`.
+   - Перевірити провененс ключових робочих файлів через `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py --verify <file>` (або `core/provenance/phase4_provenance.py --verify <file>`).
 3. **Формування стандартизованого звіту Супервайзера:**
    Вивести в чат структурований звіт:
 

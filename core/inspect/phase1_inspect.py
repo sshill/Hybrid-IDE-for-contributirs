@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Фаза 1: Універсальний інспектор форматів та AST без запуску інтерпретатора.
-Шлях: /home/hills/Documents/Antigravity_Mgr/tools/phase1_inspect.py
+Шлях: ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py
 Стандарт: Zero-Dependency Python 3.13 Stdlib (ast, zipfile, xml.etree, json).
 Усуває "інструментальний вакуум" для .docx, .xml, .json, .py AST.
 """
@@ -170,7 +170,7 @@ def inspect_json(file_path: str) -> int:
 
 def inspect_telemetry(session_query: str = "") -> int:
     """Динамічний 2D-аналіз контексту сесії: кроки, розмір транскрипту, токени Nin/Nout та статус компакції."""
-    brain_base = "/home/hills/.gemini/antigravity/brain"
+    brain_base = os.path.expanduser("~/.gemini/antigravity/brain")
     target_dir = ""
 
     if session_query and session_query != "current":
@@ -295,13 +295,23 @@ def inspect_telemetry(session_query: str = "") -> int:
             "nin": est_nin,
             "nout": est_nout
         }
-        for flag_path in (
+        brain_sg = os.path.join(target_dir, ".system_generated")
+        os.makedirs(os.path.join(brain_sg, "flags"), exist_ok=True)
+        brain_flags = [
+            os.path.join(brain_sg, "telemetry.flag"),
+            os.path.join(brain_sg, "flags", "telemetry.json"),
+        ]
+        tmp_flags = [
             f"/tmp/antigravity_telemetry_{sess_short}.flag",
             f"/tmp/antigravity_telemetry_{session_id}.flag",
             "/tmp/antigravity_telemetry_inspected.flag"
-        ):
-            with open(flag_path, "w", encoding="utf-8") as tf:
-                json.dump(telemetry_meta, tf)
+        ]
+        for flag_path in (brain_flags + tmp_flags):
+            try:
+                with open(flag_path, "w", encoding="utf-8") as tf:
+                    json.dump(telemetry_meta, tf)
+            except Exception:
+                pass
     except Exception:
         pass
 

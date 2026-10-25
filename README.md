@@ -196,21 +196,15 @@ flowchart TD
 ## 6. ⚡ Швидкий старт для контриб'ютора на Debian 13
 
 ### Крок 1: Підготовка системи Debian 13 (Trixie) Linux
-Встановіть базові системні інструменти та бібліотеки:
+Встановіть базові системні інструменти (суворо Zero-Dependency, Python 3.10+ stdlib only):
 ```bash
-sudo apt update && sudo apt install -y python3 python3-pip git curl pulseaudio-utils alsa-utils
+sudo apt update && sudo apt install -y python3 git curl pulseaudio-utils alsa-utils
 ```
 
 ### Крок 2: Встановлення Google Antigravity та підключення Google AI Pro
 > [!IMPORTANT]
 > **Встановлення Google Antigravity та підключення ключа з власного акаунту Google AI Pro наполегливо рекомендовано!**  
-> Обліковий запис **Google AI Pro** (через Google AI Studio) надає прямий доступ до найпотужнішого пулу моделей оркестрації (Tier 0: Gemini 3.8 Flash High) та релізного арбітражу (Tier 4: Claude Sonnet 5.5 / GPT-OSS 120B) з найвищим пріоритетом і без обмежень швидкості.
-
-Додайте ключ `GEMINI_API_KEY` до захищеного конфігураційного файлу:
-```bash
-echo 'GEMINI_API_KEY="AIzaSy_ваш_ключ_google_ai_pro"' >> ~/.env
-chmod 600 ~/.env
-```
+> Обліковий запис **Google AI Pro** (через Google AI Studio) надає прямий доступ до найпотужнішого пулу моделей оркестрації (Tier 0: Gemini 3.8 Flash High) та релізного арбітражу (Tier 4: Claude Sonnet / GPT-OSS 120B) з найвищим пріоритетом і без обмежень швидкості.
 
 ### Крок 3: Встановлення локальної Ollama (Tier 1 Primary Workhorse)
 Для безкоштовного локального кодингу на процесорі лаптопа встановіть Ollama та завантажте рекомендовану надшвидку модель:
@@ -219,26 +213,36 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5-coder:1.5b
 ```
 
-### Крок 4: Клонування репозиторію та безкоштовний LPU-ключ
-Клонуйте репозиторій та підключіть безкоштовний ключ Groq Cloud (14 400 RPD безкоштовно):
+### Крок 4: Розгортання автономного дистрибутивного пакунка (`distribution/hybrid-ide/`)
+Клонуйте репозиторій та запустіть перевірений Copilot CLI інсталятор плагіна «з 0»:
 ```bash
 git clone https://github.com/sshill/Hybrid-IDE-for-contributirs.git
-cd Hybrid-IDE-for-contributirs
-echo 'GROQ_API_KEY="gsk_ваш_безкоштовний_ключ_groq"' >> ~/.env
+cd Hybrid-IDE-for-contributirs/distribution/hybrid-ide
+
+# Симуляція встановлення (безпечний попередній перегляд)
+./install.sh --dry-run
+
+# Чисте встановлення у ~/.gemini/config/plugins/hybrid-ide/
+./install.sh
 ```
 
-### Крок 5: Автоматизований запуск скрипта валідації (`setup_and_verify.sh`)
-Запустіть комплексний єдиний shell-скрипт, який перевіряє всю екосистему в 6 кроків:
+### Крок 5: Налаштування ключів та пост-інсталяційна перевірка (`verify.sh`)
+Додайте облікові ключі (Groq, Gemini, Anthropic) до конфігурації плагіна:
 ```bash
+nano ~/.gemini/config/plugins/hybrid-ide/.env
+```
+Запустіть пост-інсталяційний верифікатор:
+```bash
+./verify.sh
+```
+
+### Крок 6: Комплексна валідація екосистеми (`setup_and_verify.sh`)
+У корені репозиторію запустіть комплексний єдиний скрипт перевірки:
+```bash
+cd ../..
 ./setup_and_verify.sh
 ```
-Скрипт автоматично:
-1. Перевіряє сумісність Debian 13.
-2. Тестує наявність Python 3.10+, Git, Curl.
-3. Перевіряє доступність локального демона Ollama на порті 11434.
-4. Валідує наявність ключів `GEMINI_API_KEY` та `GROQ_API_KEY` у `~/.env`.
-5. Проводить бойовий пре-флайт тест інференсу агентів Tier 1 + Tier 2.
-6. Запускає системний валідатор 37 структурних правил регламенту (37/37 PASS).
+Після успішної перевірки відкрийте Antigravity IDE та введіть `/reglament` у будь-якому чаті для проходження бойового 4-Tier AI Battle Test.
 
 ---
 
@@ -457,21 +461,15 @@ All modules are written in standard Python 3.10+ stdlib with zero external `pip`
 ## 6. ⚡ Contributor Quickstart Guide on Debian 13
 
 ### Step 1: Debian 13 (Trixie) Linux Setup & Dependencies
-Install system packages and core libraries:
+Install system packages (strictly Zero-Dependency, Python 3.10+ stdlib only):
 ```bash
-sudo apt update && sudo apt install -y python3 python3-pip git curl pulseaudio-utils alsa-utils
+sudo apt update && sudo apt install -y python3 git curl pulseaudio-utils alsa-utils
 ```
 
 ### Step 2: Install Google Antigravity & Google AI Pro Key
 > [!IMPORTANT]
 > **Installing Google Antigravity and providing your Google AI Pro API key is strongly recommended!**  
-> Having a **Google AI Pro** account (via Google AI Studio) ensures unrestricted access to the premier model pool (Tier 0 Orchestrator: Gemini 3.8 Flash High) and release auditing models (Tier 4 Arbiter: Claude Sonnet 5.5 / GPT-OSS 120B) with top throughput and zero throttling.
-
-Add your `GEMINI_API_KEY` to the secure environment configuration:
-```bash
-echo 'GEMINI_API_KEY="AIzaSy_your_google_ai_pro_key"' >> ~/.env
-chmod 600 ~/.env
-```
+> Having a **Google AI Pro** account (via Google AI Studio) ensures unrestricted access to the premier model pool (Tier 0 Orchestrator: Gemini 3.8 Flash High) and release auditing models (Tier 4 Arbiter: Claude Sonnet / GPT-OSS 120B) with top throughput and zero throttling.
 
 ### Step 3: Install Local Ollama (Tier 1 Primary Workhorse)
 For 100% free offline CPU inference on your laptop, install Ollama and pull the recommended high-speed coding model:
@@ -480,26 +478,36 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5-coder:1.5b
 ```
 
-### Step 4: Clone the Repository & Configure Free Groq LPU Key
-Clone the repository and supply your free Groq Cloud key (14,400 RPD free tier):
+### Step 4: Deploy the Standalone Distribution Package (`distribution/hybrid-ide/`)
+Clone the repository and run the Copilot CLI audited installer for clean installation:
 ```bash
 git clone https://github.com/sshill/Hybrid-IDE-for-contributirs.git
-cd Hybrid-IDE-for-contributirs
-echo 'GROQ_API_KEY="gsk_your_free_groq_key"' >> ~/.env
+cd Hybrid-IDE-for-contributirs/distribution/hybrid-ide
+
+# Simulate installation (safe preview)
+./install.sh --dry-run
+
+# Clean installation to ~/.gemini/config/plugins/hybrid-ide/
+./install.sh
 ```
 
-### Step 5: Run Automated Validation Script (`setup_and_verify.sh`)
-Execute the unified shell script to validate your environment end-to-end:
+### Step 5: Configure Credentials & Post-Install Verification (`verify.sh`)
+Add your API credentials (Groq, Gemini, Anthropic) to the secure plugin environment:
 ```bash
+nano ~/.gemini/config/plugins/hybrid-ide/.env
+```
+Run the post-installation verification suite:
+```bash
+./verify.sh
+```
+
+### Step 6: End-to-End Workspace Verification (`setup_and_verify.sh`)
+In the root of the repository, execute the full ecosystem test suite:
+```bash
+cd ../..
 ./setup_and_verify.sh
 ```
-The script automatically:
-1. Verifies Debian 13 system compatibility.
-2. Asserts Python 3.10+, Git, and Curl availability.
-3. Checks local Ollama service status on port 11434.
-4. Validates `GEMINI_API_KEY` and `GROQ_API_KEY` presence in `~/.env`.
-5. Executes pre-flight AI inference tests (Tier 1 Ollama + Tier 2 Groq LPU).
-6. Executes the 37-point General Execution Policy validator (37/37 PASS).
+After successful verification, launch your Antigravity IDE and type `/reglament` in any chat session to run the 4-Tier AI Battle Test.
 
 ---
 

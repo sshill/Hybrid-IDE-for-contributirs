@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Діагностичний валідатор Генеральної політики GEMINI.md (v0.8 / v0.9).
-Шлях: /home/hills/Documents/.agents/scripts/validate_general_policy.py
+Шлях: ~/.gemini/config/plugins/hybrid-ide/bin/validate_general_policy.py
 
 Перевіряє:
 1. Наявність та цілісність усіх розділів регламенту v0.8 / v0.9.
@@ -21,9 +21,30 @@ import time
 
 sys.dont_write_bytecode = True
 
+def resolve_default_policy() -> str:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        # 1. Project config template (core/verify/../../config/GEMINI.template.md)
+        os.path.abspath(os.path.join(script_dir, "..", "..", "config", "GEMINI.template.md")),
+        # 2. Distribution package template (distribution/hybrid-ide/rules/GEMINI.template.md)
+        os.path.abspath(os.path.join(script_dir, "..", "rules", "GEMINI.template.md")),
+        # 3. Installed plugin rules template
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/rules/GEMINI.template.md"),
+        # 4. Installed plugin AGENTS.md
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md"),
+        # 5. Local workspace AGENTS.md
+        os.path.abspath("./AGENTS.md"),
+        # 6. Legacy fallback
+        os.path.expanduser("~/Documents/GEMINI.md"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return os.path.expanduser("~/Documents/GEMINI.md")
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="Validator for GEMINI.md policy v0.8 / v0.9")
-    parser.add_argument("--policy", type=str, default="/home/hills/Documents/GEMINI.md", help="Шлях до файлу GEMINI.md")
+    parser = argparse.ArgumentParser(description="Validator for AGENTS.md / GEMINI.md policy")
+    parser.add_argument("--policy", type=str, default=resolve_default_policy(), help="Шлях до файлу правил регламенту")
     parser.add_argument("--json", action="store_true", help="Вивід у форматі JSON")
     return parser.parse_args()
 
@@ -117,6 +138,7 @@ def main():
 
     print("\n" + "=" * 55)
     print("🔍 Аудит Генеральної політики v0.8: GEMINI.md")
+    print(f"📄 Цільовий файл: {args.policy}")
     print("=" * 55)
     
     passed_count = sum(1 for c in struct_result["checks"] if c["status"] == "PASS")

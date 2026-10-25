@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Фаза 2: Валідатор контрактів планів та AI Routing Matrix.
-Шлях: /home/hills/Documents/Antigravity_Mgr/tools/phase2_router.py
+Шлях: ~/.gemini/config/plugins/hybrid-ide/bin/phase2_router.py
 Стандарт: Pydantic-style Schema Contract Verification (Zero-Dep stdlib).
 """
 

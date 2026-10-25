@@ -39,33 +39,102 @@ def _resolve_brain_state_dir(artifact_dir, conversation_id):
     return os.path.join(brain_root, clean_id, ".system_generated")
 
 def _create_telemetry_flags(brain_state_dir):
-    """Create telemetry flag files in the brain state directory and /tmp."""
+    """Create telemetry flag files in the brain state directory (.system_generated/flags) and /tmp."""
     telemetry_path = os.path.join(brain_state_dir, "telemetry.flag")
+    flags_dir = os.path.join(brain_state_dir, "flags")
+    flags_json = os.path.join(flags_dir, "telemetry.json")
     tmp_path = "/tmp/antigravity_telemetry_inspected.flag"
-    _write_file(telemetry_path, json.dumps({"timestamp": time.time(), "status": "auto_initialized"}))
-    _write_file(tmp_path, json.dumps({"timestamp": time.time(), "status": "auto_initialized"}))
+    payload = json.dumps({"timestamp": time.time(), "status": "auto_initialized"})
+    _write_file(telemetry_path, payload)
+    _write_file(flags_json, payload)
+    _write_file(tmp_path, payload)
 
-def _build_injection():
-    """Construct the injection payload for the first invocation."""
+def _detect_registered_workspaces():
+    """Знаходить локальні Git-репозиторії у ~/Documents з обмеженням часу та виключенням симлінків."""
+    repos = []
+    docs_dir = os.path.expanduser("~/Documents")
+    if os.path.isdir(docs_dir):
+        try:
+            for item in sorted(os.listdir(docs_dir)):
+                candidate = os.path.join(docs_dir, item)
+                if os.path.isdir(candidate) and not os.path.islink(candidate):
+                    if os.path.isdir(os.path.join(candidate, ".git")):
+                        repos.append(candidate)
+        except Exception:
+            pass
+    return repos
+
+def _resolve_repo_root(path):
+    """Визначає корінь репозиторію для шляху (підтримує робочі підкаталоги)."""
+    if not path or not os.path.exists(path):
+        return None
+    curr = os.path.abspath(path)
+    home = os.path.expanduser("~")
+    while curr and curr != home and curr != os.path.dirname(curr):
+        if os.path.isdir(os.path.join(curr, ".git")):
+            return curr
+        curr = os.path.dirname(curr)
+    return None
+
+def _build_injection(workspace_paths=None):
+    """Створює адаптивне повідомлення авто-старту відповідно до воркспейсу."""
+    home = os.path.expanduser("~")
+    clean_wps = [os.path.abspath(p) for p in (workspace_paths or []) if p and os.path.exists(p)]
+
+    # Визначаємо, чи сесія ненав'язана (порожня або вказує на $HOME)
+    is_unattached = not clean_wps or all(p == home for p in clean_wps)
+
+    repo_root = None
+    if not is_unattached:
+        for wp in clean_wps:
+            root = _resolve_repo_root(wp)
+            if root:
+                repo_root = root
+                break
+
+    overlay_info = "AGENTS.md"
+    warning_banner = ""
+
+    if is_unattached:
+        known_repos = _detect_registered_workspaces()
+        repos_list = "\n".join(f"  • {r}" for r in known_repos) if known_repos else "  • ~/Documents/<project>"
+        warning_banner = (
+            "⚠️ [УВАГА: Сесія відкрита без прив'язки до репозиторію (Cwd: ~)]:\n"
+            "Поточний робочий каталог є домашньою директорією користувача і НЕ є репозиторієм Git.\n"
+            "Для уникнення помилок 'fatal: not a git repository' у Фазі 1 (Діагностика):\n"
+            "• Вказуйте параметр Cwd або використовуйте 'git -C <шлях>' до цільового проєкту:\n"
+            f"{repos_list}\n"
+            "• Не використовуйте ls/find (заблоковані OS Hard Gate), читайте стан через git.\n\n"
+        )
+    elif repo_root:
+        overlay_file = os.path.join(repo_root, "AGENTS.md")
+        if os.path.isfile(overlay_file):
+            overlay_info = f"{repo_root}/AGENTS.md (активний доменний оверлей)"
+        else:
+            overlay_info = f"{repo_root} (оверлей AGENTS.md відсутній, діє лише Конституційне ядро)"
+
     guidance = (
+        f"{warning_banner}"
         "⚡ [HYBRID-IDE KERNEL v0.9.9 AUTO-START]:\n"
-        "Сесію ініціалізовано для воркспейсу. Регламент діє автоматично:\n"
+        "Сесію ініціалізовано. Регламент діє автоматично:\n"
         "• Конституційне ядро: ~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md\n"
-        "• Проєктний оверлей: AGENTS.md (Hybrid IDE Core & Contributor Overlay v0.9.9)\n"
+        f"• Проєктний оверлей: {overlay_info}\n"
         "• Фаза 1: Діагностика (лише читання; заборонено ls/find/grep, використовувати git та індекси)\n"
         "• Фаза 2: Репорт та implementation_plan.md\n"
         "• Фаза 2.5: Pre-Approval Gate — аудит плану через Tier 4 Claude Sonnet (--sonnet-audit)\n"
         "• Фаза 3: Схвалення користувача (+, +!, ++)\n"
-        "• Фаза 4.1: Збірка контексту та Pre-Check через Claude Sonnet (--sonnet-precheck)\n"
+        "• Фаза 4.1: Pre-Execution Context Assembly (Оркестратор Antigravity, view_file, zero-shell)\n"
+        "• Фаза 4.2: Pre-Check Audit Gate через Claude Sonnet (--sonnet-precheck)\n"
         "• Фаза 4.3: Синтез коду моделями ШІ (Ollama / Groq) з реєстрацією у SLSA Provenance Ledger\n"
+        "• Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт (AST, py_compile, Caprica Wine 10)\n"
         "• Фаза 4.5: Повний E2E аудит через GitHub Copilot CLI (--copilot-audit)\n"
         "• Фаза 5.1: Dual-Audit Report (Claude Sonnet + Copilot CLI) та phase5_verify.py (37/37)\n"
-        "Інструменти ядра доступні за шляхами:\n"
-        "  - core/engine/diagnostic_runner.py (ШІ-інференс Tier 1/2/4/4.5, --check-agents)\n"
-        "  - core/inspect/phase1_inspect.py (--telemetry, 2D контекст)\n"
-        "  - core/provenance/phase4_provenance.py (--register, --verify, SLSA леджер)\n"
-        "  - core/verify/phase5_verify.py (верифікація 37/37)\n"
-        "Глобальні копії інструментів: ~/.gemini/config/plugins/hybrid-ide/bin/ та .agents/scripts/."
+        "Глобальні канонічні інструменти ядра (працюють з будь-якого каталогу):\n"
+        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/diagnostic_runner.py (ШІ-інференс Tier 1/2/4/4.5)\n"
+        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py (--telemetry, 2D контекст)\n"
+        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py (--register, --verify, SLSA)\n"
+        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (верифікація 37/37)\n"
+        "У репозиторії Hybrid-IDE інструменти також доступні локально в core/."
     )
     return {
         "injectSteps": [
@@ -93,8 +162,7 @@ def main():
 
         conversation_id = str(payload.get("conversationId") or "default_conversation")
         artifact_dir = payload.get("artifactDirectoryPath")
-        # workspacePaths is read but not used in current logic
-        # workspace_paths = payload.get("workspacePaths", [])
+        workspace_paths = payload.get("workspacePaths", [])
 
         brain_state_dir = _resolve_brain_state_dir(artifact_dir, conversation_id)
         os.makedirs(brain_state_dir, exist_ok=True)
@@ -104,7 +172,7 @@ def main():
             _create_telemetry_flags(brain_state_dir)
 
         if invocation_num == 1:
-            output = _build_injection()
+            output = _build_injection(workspace_paths)
         else:
             output = {}
 

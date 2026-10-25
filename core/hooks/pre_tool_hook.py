@@ -14,7 +14,7 @@ LOG_FILE = "/tmp/antigravity_hooks.log"
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SOUND_PATH = os.path.join(SCRIPT_DIR, "..", "sounds", "access_request.wav")
 if not os.path.exists(SOUND_PATH):
-    SOUND_PATH = "/home/hills/.gemini/config/sounds/access_request.wav"
+    SOUND_PATH = os.path.expanduser("~/.gemini/config/sounds/access_request.wav")
 
 import fcntl
 
@@ -38,6 +38,76 @@ def play_sound():
                 subprocess.Popen(["/usr/bin/aplay", "-q", SOUND_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
+
+def _import_provenance_hooks():
+    prov_dirs = [
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "provenance"),
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin")),
+    ]
+    for pd in prov_dirs:
+        if os.path.isdir(pd) and pd not in sys.path:
+            sys.path.insert(0, pd)
+    try:
+        from core.provenance.phase4_provenance import reserve_passport, simulate_replacement, plan_authorizes
+        return reserve_passport, simulate_replacement, plan_authorizes
+    except ModuleNotFoundError:
+        try:
+            from phase4_provenance import reserve_passport, simulate_replacement, plan_authorizes
+            return reserve_passport, simulate_replacement, plan_authorizes
+        except ModuleNotFoundError:
+            return None, None, None
+
+def verify_contributor_plan_sanction(brain_state_dir: str, abs_target: str, base_name: str) -> bool:
+    """
+    Перевірка санкції Contributor Mode для ядра (Kernel v0.9.11).
+    Використовує єдиний канонічний авторизатор plan_authorizes() із phase4_provenance.
+    """
+    prov_hooks = _import_provenance_hooks()
+    plan_auth_fn = prov_hooks[2] if len(prov_hooks) > 2 else None
+    if plan_auth_fn:
+        ok, msg = plan_auth_fn(abs_target)
+        if ok:
+            log(f"plan_authorizes PASS: {msg}")
+            return True
+        log(f"plan_authorizes REJECT: {msg}")
+        return False
+
+    if not brain_state_dir:
+        return False
+
+    approved_sha_path = os.path.join(brain_state_dir, "approved_plan.sha256")
+    if not os.path.isfile(approved_sha_path):
+        return False
+
+    plan_path = os.path.join(os.path.dirname(brain_state_dir), "implementation_plan.md")
+    if not os.path.isfile(plan_path):
+        return False
+
+    try:
+        with open(plan_path, "rb") as pf:
+            current_plan_sha = hashlib.sha256(pf.read()).hexdigest()
+        with open(approved_sha_path, "r", encoding="utf-8") as af:
+            approved_plan_sha = af.read().strip()
+
+        if current_plan_sha != approved_plan_sha:
+            return False
+
+        with open(plan_path, "r", encoding="utf-8") as pf:
+            plan_text = pf.read()
+            patterns = [
+                rf"\[(?:MODIFY|NEW|DELETE)\]\s+.*?(?:`|/){re.escape(base_name)}`?",
+                rf"`{re.escape(abs_target)}`",
+                rf"\(file://[^\)]*{re.escape(base_name)}\)",
+                rf"\b{re.escape(base_name)}\b"
+            ]
+            for pat in patterns:
+                if re.search(pat, plan_text):
+                    return True
+    except Exception:
+        pass
+
+    return False
 
 def main():
     try:
@@ -213,11 +283,11 @@ def main():
 
         # Блокування фіктивних комітів ШІ-синтезу (Policy v0.9.1 / Anti-Shadow Gate)
         if "commit" in cmd_line and "generated:" in cmd_line.lower():
-            prov_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py"
+            prov_tool = os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py")
             if not os.path.exists(prov_tool):
                 prov_tool = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "provenance", "phase4_provenance.py"))
             if not os.path.exists(prov_tool):
-                prov_tool = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "tools", "phase4_provenance.py"))
+                prov_tool = os.path.abspath(os.path.join(SCRIPT_DIR, "phase4_provenance.py"))
             if os.path.exists(prov_tool):
                 chk = subprocess.run([sys.executable, prov_tool, "--verify-commit", cmd_line], capture_output=True, text=True)
                 if chk.returncode != 0:
@@ -236,7 +306,7 @@ def main():
         # (2) /tmp/antigravity_audit_failed.flag, (3) цільовому рефакторингу кодової бази (--heavy-refactor).
         # ============================================================
         if "copilot" in cmd_line:
-            is_copilot_cli = any(tok in ("copilot", "/home/hills/.local/bin/copilot") for tok in cmd_line.split())
+            is_copilot_cli = any(tok in ("copilot", os.path.expanduser("~/.local/bin/copilot")) for tok in cmd_line.split())
             if is_copilot_cli and not ("copilot help" in cmd_line or "copilot --version" in cmd_line or "copilot /login" in cmd_line):
                 authorized = any(os.path.exists(f) for f in (brain_copilot_auth_flag, "/tmp/antigravity_copilot_authorized.flag") if f)
                 audit_failed = any(os.path.exists(f) for f in (os.path.join(brain_state_dir, "audit_failed.flag") if brain_state_dir else None, "/tmp/antigravity_audit_failed.flag") if f)
@@ -312,6 +382,76 @@ def main():
                 print(json.dumps(res))
                 return
 
+        # ============================================================
+        # SHELL STATE ISOLATION & SECRET ISOLATION GATE (Kernel v0.9.11):
+        # Повна заборона маніпуляцій та перегляду системних файлів і секретів через шелл (deny-by-reference)
+        # ============================================================
+        norm_cmd = cmd_line.replace("\\", "/").lower()
+        protected_shell_targets = (
+            "provenance_ledger",
+            ".core_master_hmac.secret",
+            ".system_generated/flags",
+            "approved_plan.sha256"
+        )
+        has_protected_ref = any(target in norm_cmd for target in protected_shell_targets) or (".secret" in norm_cmd)
+        if has_protected_ref:
+            if ".core_master_hmac.secret" in norm_cmd or ".secret" in norm_cmd:
+                log(f"HARD DENY: Secret Isolation Gate blocked shell reference to secret: {cmd_line}")
+                res = {
+                    "decision": "deny",
+                    "reason": (
+                        "HARD GATE VIOLATION (Secret Isolation Gate v0.9.11):\n"
+                        f"Команда '{cmd_line}' заблокована! Доступ до криптографічних секретів ядра через шелл категорично заборонено."
+                    )
+                }
+                print(json.dumps(res))
+                return
+
+            shell_verbs = (
+                "cat", "cp", "mv", "rm", "sed", "dd", "truncate", "tar", "awk", "perl",
+                "rsync", "touch", "ln", "base64", "install", "chmod", "tee", ">", ">>", "python"
+            )
+            is_shell_manipulation = any(verb in norm_cmd for verb in shell_verbs)
+            if is_shell_manipulation and not ("test_provenance_security.py" in norm_cmd or "phase5_verify.py" in norm_cmd):
+                log(f"HARD DENY: Shell State Isolation Gate blocked manipulation of state file: {cmd_line}")
+                res = {
+                    "decision": "deny",
+                    "reason": (
+                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.11):\n"
+                        f"Шелл-маніпуляція захищеними файлами ('{cmd_line}') заблокована!\n"
+                        "Зміна стану сесії, леджера провененсу та секретів через шелл категорично заборонена."
+                    )
+                }
+                print(json.dumps(res))
+                return
+
+        shell_redirect_matches = re.findall(r"(?:>|>>|\|\s*tee\s+-?a?)\s*([^\s;&|]+)", cmd_line)
+        for target_match in shell_redirect_matches:
+            clean_target = target_match.strip("\"'")
+            if not clean_target:
+                continue
+            abs_redirect_target = os.path.realpath(os.path.abspath(clean_target))
+            if (
+                "/.system_generated" in abs_redirect_target or
+                "provenance_ledger" in abs_redirect_target or
+                "/flags/" in abs_redirect_target or
+                "/core/" in abs_redirect_target or
+                "approved_plan.sha256" in abs_redirect_target or
+                ".secret" in abs_redirect_target.lower()
+            ):
+                log(f"HARD DENY: Shell State Isolation Gate blocked shell write to '{clean_target}' in '{cmd_line}'")
+                res = {
+                    "decision": "deny",
+                    "reason": (
+                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.11):\n"
+                        f"Спроба запису/перенаправлення виводу шеллу у захищені системні файли ('{clean_target}') заборонена!\n"
+                        "Зміна стану сесії, леджера провененсу та вихідного коду фреймворку через шелл категорично заблокована. "
+                        "Всі мутації коду повинні здійснюватися виключно через штатні інструменти IDE з валідацією криптографічних паспортів."
+                    )
+                }
+                print(json.dumps(res))
+                return
+
     # ============================================================
     # 1. HARD DENY GATE: Блокування сліпого обходу дисків (Git & Index First)
     # ============================================================
@@ -330,6 +470,22 @@ def main():
     # Згідно з Регламентом v0.7.2 («Пиляти через Антігравіті зась!»), читання
     # файлів виконується через Git/Index First, а синтез коду — через Ollama/Groq.
     if name == "view_file":
+        target = args.get("AbsolutePath", "")
+        clean_target = target.strip().removeprefix("file://")
+        abs_target = os.path.realpath(os.path.abspath(os.path.expanduser(clean_target)))
+        norm_target = abs_target.replace("\\", "/").lower()
+        if ".core_master_hmac.secret" in norm_target or ".secret" in norm_target:
+            log(f"HARD DENY: Secret Isolation Gate blocked view_file on secret: {target}")
+            res = {
+                "decision": "deny",
+                "reason": (
+                    "HARD GATE VIOLATION (Secret Isolation Gate v0.9.11):\n"
+                    f"Прямий перегляд файлів секретів ('{target}') через view_file суворо заборонено!\n"
+                    "Криптографічні ключі ядра ізольовані та доступні виключно in-process внутрішніми функціями Python."
+                )
+            }
+            print(json.dumps(res))
+            return
         log(f"view_file invoked for: {args.get('AbsolutePath', '')}")
 
     # ============================================================
@@ -582,10 +738,11 @@ def main():
                 except Exception:
                     curr_disk_hash = ""
 
-                ledger_paths = [
+                ledger_paths = [p for p in (
+                    brain_ledger,
                     "/tmp/antigravity_provenance_ledger.json",
-                    "/home/hills/Documents/.agents/.provenance_ledger.json"
-                ]
+                    os.path.expanduser("~/Documents/.agents/.provenance_ledger.json")
+                ) if p]
                 run_ledger = {}
                 for lp in ledger_paths:
                     if os.path.exists(lp):
@@ -639,22 +796,19 @@ def main():
 
         bypass = args.get("BypassSandbox")
         if bypass is True or bypass == "true":
+            home = os.path.expanduser("~")
             trusted_host_prefixes = (
                 "git ",
                 "copilot ",
                 "copilot",
-                "/home/hills/.local/bin/copilot",
+                os.path.join(home, ".local/bin/copilot"),
                 "python3 .agents/scripts/diagnostic_runner.py",
-                "python3 /home/hills/Documents/.agents/scripts/diagnostic_runner.py",
+                f"python3 {home}/Documents/.agents/scripts/diagnostic_runner.py",
                 "python3 core/engine/diagnostic_runner.py",
-                "python3 /home/hills/Documents/Hybrid-IDE-for-contributors/core/engine/diagnostic_runner.py",
-                "python3 Antigravity_Mgr/tools/",
-                "python3 /home/hills/Documents/Antigravity_Mgr/tools/",
+                f"python3 {home}/Documents/Hybrid-IDE-for-contributors/core/engine/diagnostic_runner.py",
+                f"python3 {home}/.gemini/config/plugins/hybrid-ide/bin/",
                 "python3 .agents/tools/",
-                "python3 /home/hills/Documents/.agents/tools/",
-                "python3 F4 modding/",
-                "python3 /home/hills/Documents/fallaut/F4 modding/",
-                "python3 fallaut/",
+                f"python3 {home}/Documents/.agents/tools/",
                 "aplay "
             )
             is_trusted = any(cmd_clean.startswith(p) or cmd_norm.startswith(p) for p in trusted_host_prefixes)
@@ -664,11 +818,44 @@ def main():
     # ============================================================
     # 3. SELECTIVE CODE GUARD (v0.9.1): Захист від самостійного написання коду
     # ============================================================
-    if name in ("write_to_file", "replace_file_content"):
+    if name in ("write_to_file", "replace_file_content", "multi_replace_file_content"):
         target_file = args.get("TargetFile", "")
         if target_file:
-            normalized = target_file.replace("\\", "/").lower()
+            clean_tf = target_file.strip().removeprefix("file://")
+            abs_norm = os.path.realpath(os.path.abspath(os.path.expanduser(clean_tf)))
+            normalized = abs_norm.replace("\\", "/").lower()
             base_name = os.path.basename(normalized)
+
+            # ============================================================
+            # LEDGER IMMUTABILITY & SECRET ISOLATION GATE (Kernel v0.9.11)
+            # ============================================================
+            is_ledger_file = (
+                "provenance_ledger" in normalized or
+                base_name.startswith("provenance_ledger")
+            )
+            is_secret_file = (
+                ".core_master_hmac.secret" in normalized or
+                ".secret" in normalized
+            )
+            is_flag_state = (
+                "/.system_generated/flags/" in normalized or
+                normalized.endswith("/.system_generated/flags")
+            )
+            
+            if is_ledger_file or is_secret_file or is_flag_state:
+                log(f"HARD DENY: Ledger Immutability Gate blocked {name} on protected state file '{target_file}'")
+                res = {
+                    "decision": "deny",
+                    "reason": (
+                        "HARD GATE VIOLATION (Ledger Immutability Gate v0.9.11):\n"
+                        f"Пряма модифікація захищених системних файлів ('{target_file}') через інструмент '{name}' суворо заборонена!\n"
+                        "Реєстр провененсу, криптографічні секрети та прапорці сесії оновлюються ВИКЛЮЧНО "
+                        "внутрішніми модулями ядра Python (apply_passport / save_ledger). "
+                        "Спроба фальсифікації паспортів або стану сесії відхилена."
+                    )
+                }
+                print(json.dumps(res))
+                return
 
             # ============================================================
             # PHASE 1 TELEMETRY GATE (Kernel v0.9.8): Блокування Фази 2 та мутацій без телеметрії
@@ -723,11 +910,7 @@ def main():
                 content_len = len(args.get("CodeContent", "")) or len(args.get("ReplacementContent", ""))
                 # Якщо обсяг нового контенту або заміни > 1500 байт — вимагається реєстрація провененсу
                 if content_len > 1500:
-                    ledger_paths = [p for p in (
-                        brain_ledger,
-                        "/tmp/antigravity_provenance_ledger.json",
-                        "/home/hills/Documents/.agents/.provenance_ledger.json"
-                    ) if p]
+                    ledger_paths = [brain_ledger] if brain_ledger else []
                     has_doc_entry = False
                     abs_target = os.path.abspath(target_file)
                     for lp in ledger_paths:
@@ -782,116 +965,134 @@ def main():
             if not is_doc:
                 # 2. Контрольовані файли коду (*.py, *.sh, *.bash, *.ts, *.js, *.pas, *.cpp, *.h, *.go)
                 # HARD GATE: Вимагається обов'язкова реєстрація в реєстрі провененсу
-                abs_target = os.path.abspath(target_file)
-                code_content = args.get("CodeContent", "")
-                repl_content = args.get("ReplacementContent", "")
+                abs_target = os.path.realpath(os.path.abspath(target_file))
+                baseline_sha256 = None
+                if os.path.isfile(abs_target):
+                    try:
+                        h = hashlib.sha256()
+                        with open(abs_target, "rb") as bf:
+                            while chunk := bf.read(65536):
+                                h.update(chunk)
+                        baseline_sha256 = h.hexdigest()
+                    except Exception:
+                        pass
 
-                content_hashes = []
-                if code_content:
-                    content_hashes.append(hashlib.sha256(code_content.encode("utf-8")).hexdigest())
-                if repl_content:
-                    content_hashes.append(hashlib.sha256(repl_content.encode("utf-8")).hexdigest())
+                target_sha256 = None
+                prov_hooks = _import_provenance_hooks()
+                reserve_fn, sim_fn = prov_hooks[0], prov_hooks[1]
 
-                ledger_paths = [p for p in (
-                    brain_ledger,
-                    "/tmp/antigravity_provenance_ledger.json",
-                    "/home/hills/Documents/.agents/.provenance_ledger.json"
-                ) if p]
-                ledger = {}
-                for lp in ledger_paths:
-                    if os.path.exists(lp):
-                        try:
-                            with open(lp, "r", encoding="utf-8") as lf:
-                                ledger.update(json.load(lf))
-                        except Exception:
-                            pass
+                if name == "write_to_file":
+                    code_content = args.get("CodeContent", "")
+                    target_sha256 = hashlib.sha256(code_content.encode("utf-8")).hexdigest()
+                elif name == "replace_file_content":
+                    target_content = args.get("TargetContent", "")
+                    replacement_content = args.get("ReplacementContent", "")
+                    start_line = args.get("StartLine")
+                    end_line = args.get("EndLine")
+                    allow_multiple = args.get("AllowMultiple", False)
+
+                    try:
+                        with open(abs_target, "rb") as f:
+                            content_bytes = f.read()
+                    except Exception as e:
+                        content_bytes = b""
+
+                    if sim_fn:
+                        ok_sim, sim_bytes, sim_err = sim_fn(
+                            content_bytes=content_bytes,
+                            target_bytes=target_content.encode("utf-8"),
+                            replacement_bytes=replacement_content.encode("utf-8"),
+                            start_line=start_line,
+                            end_line=end_line,
+                            allow_multiple=allow_multiple
+                        )
+                        if not ok_sim:
+                            log(f"HARD DENY: In-memory replacement simulation failed for '{target_file}': {sim_err}")
+                            res = {
+                                "decision": "deny",
+                                "reason": (
+                                    "HARD GATE VIOLATION (In-Memory Replacement Simulation Gate v0.9.10):\n"
+                                    f"Симуляція заміни для '{target_file}' завершилася помилкою: {sim_err}.\n"
+                                    "Заміна відхилена через невідповідність межам або порожній TargetContent."
+                                )
+                            }
+                            print(json.dumps(res))
+                            return
+                        target_sha256 = hashlib.sha256(sim_bytes).hexdigest()
 
                 authorized = False
+                reserve_reason = ""
+                passport_id = None
 
-                # ЛІКВІДАЦІЯ SHORT-CIRCUIT & STRICT TARGET BINDING (Kernel v0.9.8):
-                # Для write_to_file: хеш нового контенту зобов'язаний збігатися з зареєстрованим хешем САМЕ ЦЬОГО файлу в леджері
-                if name == "write_to_file":
-                    if abs_target in ledger:
-                        reg_hash = ledger[abs_target].get("sha256")
-                        if reg_hash and reg_hash in content_hashes:
-                            authorized = True
+                # Спроба резервування криптографічного паспорта (Policy v0.9.10)
+                if reserve_fn and target_sha256:
+                    ok_res, p_id, p_msg = reserve_fn(
+                        session_id=sess_id,
+                        file_path=abs_target,
+                        baseline_sha256=baseline_sha256,
+                        target_sha256=target_sha256,
+                        tool_name=name
+                    )
+                    if ok_res:
+                        authorized = True
+                        passport_id = p_id
+                        log(f"Passport {p_id} RESERVED for {name} on {target_file}")
+                    else:
+                        reserve_reason = p_msg
 
-                # Для replace_file_content: прямий DIY-патч коду оркестратором заборонено.
-                # Дозволяється лише за наявності активного сесійного прапорця авторизації
-                # або якщо це файл ядра/інструментів у межах затвердженого плану.
-                elif name == "replace_file_content":
-                    pass
+                # Перевірка структурованих прапорців сесії у brain_state_dir
+                if not authorized and brain_state_dir:
+                    flags_dir = os.path.join(brain_state_dir, "flags")
+                    if os.path.isdir(flags_dir):
+                        for fj in os.listdir(flags_dir):
+                            if fj.endswith(".json"):
+                                try:
+                                    with open(os.path.join(flags_dir, fj), "r", encoding="utf-8") as f_json:
+                                        meta = json.load(f_json)
+                                        if meta.get("meta", {}).get("file_path") == abs_target:
+                                            if meta.get("meta", {}).get("target_sha256") == target_sha256:
+                                                authorized = True
+                                                break
+                                except Exception:
+                                    pass
 
-                # Перевірка сесійних прапорців валідації/синтезу
+                # Перевірка Contributor Mode для ядра (Kernel v0.9.10)
                 if not authorized:
-                    for flag_path in (
-                        os.path.join(brain_state_dir, "provenance_valid.flag") if brain_state_dir else None,
-                        os.path.join(brain_state_dir, "ollama_synthesized.flag") if brain_state_dir else None,
-                        brain_copilot_flag,
-                        "/tmp/antigravity_provenance_valid.flag",
-                        "/tmp/antigravity_ollama_synthesized.flag",
-                        "/tmp/antigravity_copilot_executed.flag"
-                    ):
-                        if flag_path and os.path.exists(flag_path):
-                            try:
-                                with open(flag_path, "r", encoding="utf-8") as vf:
-                                    flag_txt = vf.read()
-                                    if abs_target in flag_txt:
-                                        authorized = True
-                                        break
-                            except Exception:
-                                pass
-
-                # Для файлів ядра фреймворку (Hybrid-IDE / .agents / Antigravity_Mgr):
-                # якщо Фаза 4 активна за затвердженим планом (implementation_plan.md)
-                if not authorized and any(os.path.exists(pf) for pf in all_phase4_flags):
                     is_core_maintenance = (
                         "/core/" in abs_target or
                         "/.agents/" in abs_target or
                         "/Antigravity_Mgr/" in abs_target or
-                        abs_target.endswith("AGENTS.md")
+                        abs_target.endswith("AGENTS.md") or
+                        abs_target.endswith("setup_and_verify.sh") or
+                        abs_target.endswith("build_dist.sh") or
+                        abs_target.endswith("push_to_github.sh")
                     )
                     if is_core_maintenance:
-                        plan_path = None
-                        brain_dir = os.path.expanduser("~/.gemini/antigravity/brain")
-                        if os.path.exists(brain_dir):
-                            # Знаходимо найновіший implementation_plan.md за mtime
-                            candidates = []
-                            for sdir in os.listdir(brain_dir):
-                                cand = os.path.join(brain_dir, sdir, "implementation_plan.md")
-                                if os.path.isfile(cand):
-                                    candidates.append((os.path.getmtime(cand), cand))
-                            if candidates:
-                                candidates.sort(key=lambda x: x[0], reverse=True)
-                                plan_path = candidates[0][1]
-                        if plan_path and os.path.exists(plan_path):
-                            try:
-                                with open(plan_path, "r", encoding="utf-8") as pf:
-                                    plan_content = pf.read()
-                                    if base_name in plan_content or abs_target in plan_content:
-                                        authorized = True
-                            except Exception:
-                                pass
+                        if verify_contributor_plan_sanction(brain_state_dir, abs_target, base_name):
+                            authorized = True
+                            log(f"Contributor Mode SANCTION verified for core maintenance on '{target_file}'")
 
                 if not authorized:
-                    log(f"HARD DENY: Selective Code Guard blocked DIY code edit on '{target_file}' via {name}")
+                    log(f"HARD DENY: Selective Code Guard blocked unauthenticated edit on '{target_file}' via {name}")
                     res = {
                         "decision": "deny",
                         "reason": (
-                            "HARD GATE VIOLATION (Zero DIY Coding / Strict Hash Integrity Gate v0.9.8):\n"
-                            f"Заборонено несанкціоноване створення/редагування виконуваного коду через {name} на '{target_file}'.\n"
-                            "Хеш контенту не збігається із зареєстрованим ШІ-хешем у леджері, або відсутній активний сесійний прапорець генерації.\n"
-                            "Код має бути синтезований локальною Ollama (python3 .agents/scripts/diagnostic_runner.py --synthesize-script \"<task>\" --out <file>) або узгоджений через Phase 4 Provenance."
+                            "HARD GATE VIOLATION (Cryptographic Hash Passport Integrity Gate v0.9.10):\n"
+                            f"Заборонено несанкціоноване створення/редагування коду через {name} на '{target_file}'.\n"
+                            f"Причина відхилення паспорта: {reserve_reason or 'відсутній валідний MINTED паспорт у леджері'}.\n"
+                            "Код зобов'язаний попередньо генеруватися ШІ-моделями (Tier 1 Ollama / Tier 2 Groq) через diagnostic_runner.py, "
+                            "яка випускає активний криптографічний паспорт провененсу, або мати санкцію Contributor Mode (approved_plan.sha256)."
                         )
                     }
                     print(json.dumps(res))
                     return
 
             # Перевірка довірених просторів
+            home = os.path.expanduser("~")
             trusted_host_roots = (
-                "/home/hills/Documents",
-                "/home/hills/.gemini/antigravity/brain",
-                "/home/hills/.gemini/config"
+                os.path.join(home, "Documents"),
+                os.path.join(home, ".gemini/antigravity/brain"),
+                os.path.join(home, ".gemini/config")
             )
             in_trusted = any(target_file.startswith(tr) for tr in trusted_host_roots) or (
                 workspace_paths and any(target_file.startswith(wp) for wp in workspace_paths)

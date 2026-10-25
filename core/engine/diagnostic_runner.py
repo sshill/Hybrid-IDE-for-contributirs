@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Уніфікований діагностичний раннер для робочого простору Antigravity (v0.7).
-Шлях: /home/hills/Documents/.agents/scripts/diagnostic_runner.py
+Шлях: ~/.gemini/config/plugins/hybrid-ide/bin/diagnostic_runner.py
 
 Забезпечує стабільну точку входу для:
 - Діагностики середовища, системи та сервісу Ollama
@@ -13,24 +13,27 @@
 """
 
 import argparse
+import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import time
 import urllib.request
 import urllib.error
+import uuid
 
 sys.dont_write_bytecode = True
 
 def load_env_credentials():
     """Автоматичне завантаження ключів з ~/.env та .env воркспейсу."""
     candidates = [
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/.env"),
         os.path.expanduser("~/.env"),
-        "/home/hills/Documents/.env",
-        "/home/hills/Documents/fallaut/.env",
+        os.path.expanduser("~/Documents/.env"),
         os.path.join(os.getcwd(), ".env")
     ]
     for env_file in candidates:
@@ -51,16 +54,112 @@ def load_env_credentials():
 
 load_env_credentials()
 
-def write_session_flag(flag_name: str, content: str):
-    """Dual-write session flag to Brain-First .system_generated and /tmp."""
+def _import_provenance():
+    """Динамічний імпорт функцій провененсу з phase4_provenance (Dual-Layout)."""
+    prov_dirs = [
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "provenance"),
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin")),
+    ]
+    for pd in prov_dirs:
+        if os.path.isdir(pd) and pd not in sys.path:
+            sys.path.insert(0, pd)
+    try:
+        from core.provenance.phase4_provenance import mint_passport, simulate_replacement
+        return mint_passport, simulate_replacement
+    except ModuleNotFoundError:
+        try:
+            from phase4_provenance import mint_passport, simulate_replacement
+            return mint_passport, simulate_replacement
+        except ModuleNotFoundError:
+            return None, None
+
+def _import_migration_validator():
+    """Динамічний імпорт функцій валідації міграції (Dual-Layout)."""
+    engine_dirs = [
+        os.path.dirname(__file__),
+        os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin")),
+    ]
+    for ed in engine_dirs:
+        if os.path.isdir(ed) and ed not in sys.path:
+            sys.path.insert(0, ed)
+    try:
+        from core.engine.validate_migration_content import (
+            validate_migration_text,
+            validate_migration_file,
+            generate_canonical_bridge_prompt,
+        )
+        return validate_migration_text, validate_migration_file, generate_canonical_bridge_prompt
+    except ModuleNotFoundError:
+        try:
+            from validate_migration_content import (
+                validate_migration_text,
+                validate_migration_file,
+                generate_canonical_bridge_prompt,
+            )
+            return validate_migration_text, validate_migration_file, generate_canonical_bridge_prompt
+        except ModuleNotFoundError:
+            return None, None, None
+
+def resolve_session_id() -> str:
+    """Визначає ідентифікатор активної сесії Antigravity."""
+    if "HYBRID_IDE_BRAIN_DIR" in os.environ and os.environ["HYBRID_IDE_BRAIN_DIR"]:
+        return os.path.basename(os.environ["HYBRID_IDE_BRAIN_DIR"])
     brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
     if os.path.exists(brain_root):
         try:
-            for bdir in os.listdir(brain_root):
-                sg = os.path.join(brain_root, bdir, ".system_generated")
-                if os.path.isdir(sg):
-                    with open(os.path.join(sg, flag_name), "w", encoding="utf-8") as f_bf:
-                        f_bf.write(content)
+            cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+            if cands:
+                cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                return os.path.basename(cands[0])
+        except Exception:
+            pass
+    return "session_default"
+
+def compute_prompt_code_shingle_overlap(prompt_text: str, code_text: str, n: int = 8) -> float:
+    """
+    Обчислює відсоток збігу 8-слівних шинґлів між промптом (без блоків <context>) та згенерованим кодом.
+    Захист від Echo Laundering: заборона переписування тексту завдання замість логіки.
+    """
+    cleaned_prompt = re.sub(r"<context>.*?</context>", "", prompt_text, flags=re.DOTALL)
+    prompt_tokens = re.findall(r"\b\w+\b", cleaned_prompt.lower())
+    code_tokens = re.findall(r"\b\w+\b", code_text.lower())
+    if len(prompt_tokens) < n or len(code_tokens) < n:
+        return 0.0
+    prompt_shingles = set(tuple(prompt_tokens[i:i+n]) for i in range(len(prompt_tokens) - n + 1))
+    code_shingles = set(tuple(code_tokens[i:i+n]) for i in range(len(code_tokens) - n + 1))
+    if not code_shingles:
+        return 0.0
+    overlap = prompt_shingles.intersection(code_shingles)
+    return len(overlap) / len(code_shingles)
+
+def write_session_flag(flag_name: str, content: str, meta: dict = None):
+    """Dual-write session flag to Brain-First .system_generated/flags and /tmp."""
+    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+    if os.path.exists(brain_root):
+        try:
+            cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+            if cands:
+                cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                for bdir in cands[:2]:
+                    sg = os.path.join(bdir, ".system_generated")
+                    if os.path.isdir(sg):
+                        # Flat flag compatibility
+                        with open(os.path.join(sg, flag_name), "w", encoding="utf-8") as f_bf:
+                            f_bf.write(content)
+                        # Structured JSON in flags/
+                        flags_dir = os.path.join(sg, "flags")
+                        os.makedirs(flags_dir, exist_ok=True)
+                        flag_base = flag_name[:-5] if flag_name.endswith(".flag") else flag_name
+                        json_payload = {
+                            "flag": flag_name,
+                            "timestamp": time.time(),
+                            "content": content.strip(),
+                            "meta": meta or {}
+                        }
+                        with open(os.path.join(flags_dir, f"{flag_base}.json"), "w", encoding="utf-8") as f_json:
+                            json.dump(json_payload, f_json, indent=2)
         except Exception:
             pass
     try:
@@ -407,7 +506,13 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
     if mode == "audit":
         target_prompt = f"Зроби поглиблений аудит плану впровадження (Phase 2.5 Pre-Approval Gate) на відповідність регламенту, відсутність прогалин та ризиків:\n\n{prompt}"
     elif mode == "precheck":
-        target_prompt = f"Зроби Phase 4.1 Pre-Execution Check: перевір повноту зібраної інформації, точні шляхи файлів та безпеку запланованих змін перед модифікацією:\n\n{prompt}"
+        target_prompt = (
+            "You are a strict, read-only Architecture & Contract Arbiter (Phase 4.2 Pre-Check Gate).\n"
+            "CRITICAL CONSTRAINT (Zero-Shell Policy): DO NOT execute shell commands, do not attempt to run bash, cd, or terminal inspection tools. "
+            "All required context and implementation plans are provided directly in this prompt. "
+            "Perform a pure semantic and architectural audit of the plan against the provided context:\n\n"
+            f"{prompt}"
+        )
     else:
         target_prompt = prompt
 
@@ -470,7 +575,7 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
 
     # 3. Copilot CLI Fallback (Tier 4 / 4.5 Arbiter)
     if not output_text:
-        copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+        copilot_bin = shutil.which("copilot") or os.path.expanduser("~/.local/bin/copilot")
         if os.path.exists(copilot_bin) or shutil.which("copilot"):
             cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", target_prompt]
             if extra_args:
@@ -504,7 +609,7 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
 
 def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = None) -> str:
     """Нативний інференс через GitHub Copilot CLI (Tier 4.5 Pre-Release Arbiter / Policy v0.9.7)."""
-    copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+    copilot_bin = shutil.which("copilot") or os.path.expanduser("~/.local/bin/copilot")
     if not (os.path.exists(copilot_bin) or shutil.which("copilot")):
         print("❌ GitHub Copilot CLI не знайдено в системі.", file=sys.stderr)
         return "COPILOT_NOT_FOUND"
@@ -569,6 +674,47 @@ def check_semantic_constraints(response_text: str, max_words: int = None, requir
 
     return status
 
+def check_anchor_spec(prompt: str, strict: bool = False, bypass: bool = False) -> dict:
+    """Pre-flight валідація якірних специфікацій у промпті (Anchored Grounding / Anti-Echo Gate)."""
+    if bypass or not prompt:
+        return {"anchored": True, "anchors": [], "warnings": []}
+    import re
+    anchors = []
+    if re.search(r'\b(?:0x[0-9a-fA-F]{6,8}|[0-9a-fA-F]{8})\b', prompt):
+        anchors.append("formid_or_hex_address")
+    if re.search(r'[\w\-\/\\]+\.(?:esm|esp|psc|pex|log|py|json|md|yaml|yml|txt|sh|ini|cfg)\b', prompt, re.IGNORECASE):
+        anchors.append("file_or_extension_anchor")
+    if re.search(r'\b(?:[A-Z]\w+::\w+|def\s+\w+|class\s+\w+|Function\s+\w+)\b', prompt):
+        anchors.append("code_symbol_anchor")
+    if re.search(r'"[^"\n]{4,}"|\'[^\'\n]{4,}\'', prompt):
+        anchors.append("exact_quoted_spec")
+    vague_patterns = [
+        r'\b(?:знайди|найди|пошукай)\s+(?:щось|когось|якогось|персонажа)\b',
+        r'\bчому\s+(?:воно\s+)?не\s+працює\b',
+        r'\bwhat\s+is\s+wrong\b',
+        r'\bfind\s+(?:something|someone)\b'
+    ]
+    is_vague = any(re.search(vp, prompt, re.IGNORECASE) for vp in vague_patterns)
+    status = {"anchored": len(anchors) > 0 and not is_vague, "anchors": anchors, "is_vague": is_vague, "warnings": []}
+    if not status["anchored"]:
+        msg = "⚠️ [ANCHORED GROUNDING WARNING]: Запит не містить точної якірної специфікації (FormID, файл, символ, лапки). Сліпі запити ('найди щось') заблоковано від переписування здогадок (Anti-Echo)."
+        status["warnings"].append(msg)
+        print(msg, file=sys.stderr)
+        if strict:
+            raise ValueError(f"ANCHOR_SPEC_VIOLATION: Запит заблоковано в суворому режимі (--strict-anchor): {prompt[:100]}...")
+    return status
+
+def sanitize_sensitive_tokens(text: str) -> str:
+    """Санітизація чутливих токенів та секретів перед відправкою до Шлюзу 4.2."""
+    import re
+    if not text:
+        return ""
+    sanitized = re.sub(r'(Bearer\s+)[A-Za-z0-9_\-\.]{16,}', r'\1[REDACTED_TOKEN]', text, flags=re.IGNORECASE)
+    sanitized = re.sub(r'\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b', r'[REDACTED_GH_TOKEN]', sanitized)
+    sanitized = re.sub(r'\b(gsk_|sk-ant-|sk-)[A-Za-z0-9_\-]{20,}\b', r'[REDACTED_API_KEY]', sanitized)
+    sanitized = re.sub(r'(["\']?(?:API_KEY|TOKEN|SECRET)["\']?\s*[:=]\s*["\'])[^\s"\']{16,}(["\'])', r'\1[REDACTED_SECRET]\2', sanitized, flags=re.IGNORECASE)
+    return sanitized
+
 def pre_audit_code_file(file_path: str) -> bool:
     """Детерміністична передрелізна перевірка синтаксису (AST + py_compile) перед Фазою 2."""
     import py_compile
@@ -606,7 +752,7 @@ def check_all_ai_agents(model_ollama: str = "qwen2.5-coder:1.5b", model_groq: st
     print(f"Відповідь Claude Sonnet: {res_claude}\n")
 
     print("🔹 [4/4] Тест доступності Tier 4.5 GitHub Copilot CLI...")
-    copilot_bin = shutil.which("copilot") or "/home/hills/.local/bin/copilot"
+    copilot_bin = shutil.which("copilot") or os.path.expanduser("~/.local/bin/copilot")
     if os.path.exists(copilot_bin) or shutil.which("copilot"):
         try:
             ver = subprocess.run([copilot_bin, "--version"], capture_output=True, text=True, timeout=5)
@@ -657,7 +803,14 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
     # Спроба залучення динамічного роутера фази 2
     route_info = None
     try:
-        sys.path.insert(0, "/home/hills/Documents/Antigravity_Mgr/tools")
+        router_dirs = [
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "router"),
+            os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin"),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin"))
+        ]
+        for rd in router_dirs:
+            if os.path.isdir(rd) and rd not in sys.path:
+                sys.path.insert(0, rd)
         from phase2_router import calculate_route
         est_prompt_tokens = int(len(task_prompt.split()) * 1.3) + 150
         route_info = calculate_route(est_prompt_tokens, estimated_out_tokens=400, sla_sec=sla_sec)
@@ -760,27 +913,70 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
     abs_out = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(abs_out), exist_ok=True)
     try:
-        with open(abs_out, "w", encoding="utf-8") as f:
-            f.write(clean_code + "\n")
+        # Перевірка на Echo Laundering через 8-слівні шинґли
+        overlap_ratio = compute_prompt_code_shingle_overlap(task_prompt, clean_code, n=8)
+        if overlap_ratio > 0.25:
+            print(f"⚠️ Попередження: виявлено високий рівень збігу шинґлів ({overlap_ratio*100:.1f}%) між промптом та кодом (можливий Echo Laundering).", file=sys.stderr)
+
+        clean_code = clean_code.rstrip() + "\n"
+        final_bytes = clean_code.encode("utf-8")
+        target_sha256 = hashlib.sha256(final_bytes).hexdigest()
+
+        baseline_sha256 = None
+        if os.path.isfile(abs_out):
+            try:
+                h = hashlib.sha256()
+                with open(abs_out, "rb") as bf:
+                    while chunk := bf.read(65536):
+                        h.update(chunk)
+                baseline_sha256 = h.hexdigest()
+            except Exception:
+                pass
+
+        session_id = resolve_session_id()
+
+        # Випуск криптографічного паспорта провененсу in-process (Policy v0.9.10)
+        mint_fn, _ = _import_provenance()
+        passport_id = None
+        if mint_fn:
+            try:
+                metrics = {
+                    "eval_count": eval_count,
+                    "prompt_eval_duration_ms": prompt_eval_duration_ms,
+                    "synthesized_at": time.time(),
+                    "shingle_overlap_ratio": round(overlap_ratio, 4)
+                }
+                passport_id = mint_fn(
+                    session_id=session_id,
+                    file_path=abs_out,
+                    baseline_sha256=baseline_sha256,
+                    target_sha256=target_sha256,
+                    model=active_model,
+                    tier=active_tier,
+                    metrics=metrics
+                )
+                print(f"🎫 Випущено криптографічний паспорт: {passport_id}")
+            except Exception as pe:
+                print(f"⚠️ Помилка випуску паспорта провененсу: {pe}", file=sys.stderr)
+
+        with open(abs_out, "wb") as f:
+            f.write(final_bytes)
         print(f"✅ Скрипт успішно згенеровано ({active_model}, Tier {active_tier}) та збережено: {abs_out}")
 
-        # Реєстрація в реєстрі провененсу (Anti-Shadow Gate v0.9.1)
-        prov_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase4_provenance.py"
-        if not os.path.exists(prov_tool):
-            prov_tool = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "provenance", "phase4_provenance.py"))
-        if os.path.exists(prov_tool):
-            cmd = [
-                sys.executable, prov_tool,
-                "--register", abs_out,
-                "--model", active_model,
-                "--prompt", task_prompt[:250]
-            ]
-            if active_tier == 1 and eval_count > 0:
-                cmd.extend(["--eval-count", str(eval_count), "--duration-ms", str(prompt_eval_duration_ms)])
-            subprocess.run(cmd)
-
-        # Створення сесійного прапорця валідації
-        write_session_flag("ollama_synthesized.flag", f"SYNTHESIZED: {abs_out} model={active_model} tier={active_tier} eval_count={eval_count} timestamp={time.time()}\n")
+        # Створення сесійного прапорця валідації (Brain-First JSON + flat)
+        write_session_flag(
+            "ollama_synthesized.flag",
+            f"SYNTHESIZED: {abs_out} model={active_model} tier={active_tier} eval_count={eval_count} timestamp={time.time()}\n",
+            meta={
+                "file_path": abs_out,
+                "model": active_model,
+                "tier": active_tier,
+                "target_sha256": target_sha256,
+                "eval_count": eval_count,
+                "session_id": session_id,
+                "passport_id": passport_id
+            }
+        )
 
         print(f"👉 Для виконання запустіть:\n   python3 {os.path.abspath(__file__)} --run {abs_out}")
         return 0
@@ -826,11 +1022,18 @@ def main():
     # Claude Sonnet Arbiter (Tier 4 / Policy v0.9.9)
     parser.add_argument("--sonnet-query", type=str, help="Запит до Claude Sonnet (Tier 4 Arbiter)")
     parser.add_argument("--sonnet-audit", type=str, help="Аудит плану або коду через Claude Sonnet (Phase 2.5 Pre-Approval Gate)")
-    parser.add_argument("--sonnet-precheck", type=str, help="Pre-Execution валідація контексту через Claude Sonnet (Phase 4.1)")
+    parser.add_argument("--sonnet-precheck", type=str, help="Pre-Execution валідація плану та контексту через Claude Sonnet (Phase 4.2 Pre-Check Gate)")
+    parser.add_argument("--precheck-context", type=str, default=None, help="Шлях до файлу зібраного контексту для Phase 4.2 Pre-Check")
 
     # Семантичний контроль та детерміністичний аудит (Policy v0.9.7)
     parser.add_argument("--max-words", type=int, default=None, help="Обмеження максимальної кількості слів у відповіді")
+    parser.add_argument("--strict-anchor", action="store_true", help="Блокувати запити без точних якірних специфікацій (Anti-Echo Gate)")
     parser.add_argument("--pre-audit", type=str, help="Детерміністична перевірка синтаксису (AST + py_compile) перед Фазою 2")
+
+    # Мостові промпти та валідація міграції (Kernel v0.9.10)
+    parser.add_argument("--bridge", action="store_true", help="Генерація та валідація канонічного Bridge Prompt (v0.9.10)")
+    parser.add_argument("--workspace", type=str, default=None, help="Шлях до робочого простору для мостових промптів та аудиту")
+    parser.add_argument("--validate-migration", type=str, help="Валідація файлу або контенту на відсутність інструкцій протидії регламенту")
 
     # Запуск скриптів
     parser.add_argument("--run", type=str, help="Шлях до діагностичного скрипта для виконання")
@@ -847,6 +1050,38 @@ def main():
             return 1
 
     args = parser.parse_args()
+
+    # 0. Мостові промпти та валідація міграції (Kernel v0.9.10)
+    if args.bridge:
+        val_text, val_file, gen_bridge = _import_migration_validator()
+        if not gen_bridge:
+            print("❌ Модуль validate_migration_content недоступний.", file=sys.stderr)
+            return 1
+        ok, prompt_or_err = gen_bridge(workspace_dir=args.workspace)
+        if not ok:
+            print(f"❌ FAIL-CLOSED: {prompt_or_err}", file=sys.stderr)
+            return 1
+        print(prompt_or_err)
+        return 0
+
+    if args.validate_migration:
+        val_text, val_file, gen_bridge = _import_migration_validator()
+        if not val_text or not val_file:
+            print("❌ Модуль validate_migration_content недоступний.", file=sys.stderr)
+            return 1
+        target = args.validate_migration
+        if os.path.exists(target):
+            ok, violations = val_file(target)
+        else:
+            ok, violations = val_text(target)
+        if ok:
+            print(f"🟢 PASS: Контент не містить інструкцій протидії регламенту.")
+            return 0
+        else:
+            print(f"🔴 FAIL: Виявлено інструкції протидії або застарілий контент:", file=sys.stderr)
+            for v in violations:
+                print(f"  ⚠️ {v}", file=sys.stderr)
+            return 1
 
     # 1. Перевірка сервісів
     if args.check_agents:
@@ -898,6 +1133,8 @@ def main():
     # 4. Прямий текстовий запит до Ollama
     if args.ollama_query:
         print_section(f"Ollama Прямий запит ({args.model})")
+        bypass_anchor = "ping" in args.ollama_query.lower()
+        check_anchor_spec(args.ollama_query, strict=args.strict_anchor, bypass=bypass_anchor)
         res = query_ollama_engine(args.ollama_query, model=args.model)
         if args.max_words:
             check_semantic_constraints(res, max_words=args.max_words)
@@ -907,6 +1144,8 @@ def main():
     # 5. Хмарні запити (Рівень 2)
     if args.groq_query:
         print_section("Groq Cloud LPU Запит")
+        bypass_anchor = "ping" in args.groq_query.lower()
+        check_anchor_spec(args.groq_query, strict=args.strict_anchor, bypass=bypass_anchor)
         groq_model = args.model if args.model and not args.model.startswith("qwen2.5") else "openai/gpt-oss-120b"
         res = query_groq_engine(args.groq_query, model=groq_model)
         if args.max_words:
@@ -916,6 +1155,8 @@ def main():
 
     if args.openrouter_query:
         print_section("OpenRouter Запит")
+        bypass_anchor = "ping" in args.openrouter_query.lower()
+        check_anchor_spec(args.openrouter_query, strict=args.strict_anchor, bypass=bypass_anchor)
         res = query_openrouter_engine(args.openrouter_query)
         if args.max_words:
             check_semantic_constraints(res, max_words=args.max_words)
@@ -924,6 +1165,8 @@ def main():
 
     # 5.1. GitHub Copilot CLI запити (Tier 4.5 / Policy v0.9.7)
     if args.copilot_query:
+        bypass_anchor = "ping" in args.copilot_query.lower()
+        check_anchor_spec(args.copilot_query, strict=args.strict_anchor, bypass=bypass_anchor)
         res = query_copilot_engine(args.copilot_query, mode="query")
         if args.max_words:
             check_semantic_constraints(res, max_words=args.max_words)
@@ -943,6 +1186,8 @@ def main():
     # 5.1b. Claude Sonnet запити (Tier 4 Arbiter / Policy v0.9.9)
     if args.sonnet_query:
         print_section("Claude Sonnet Інференс (Tier 4)")
+        bypass_anchor = "ping" in args.sonnet_query.lower()
+        check_anchor_spec(args.sonnet_query, strict=args.strict_anchor, bypass=bypass_anchor)
         res = query_claude_engine(args.sonnet_query, mode="query")
         if args.max_words:
             check_semantic_constraints(res, max_words=args.max_words)
@@ -962,16 +1207,43 @@ def main():
         print(res)
         return 0
 
+    # 5.1. Claude Sonnet Phase 4.2 Pre-Execution Pre-Check
     if args.sonnet_precheck:
-        print_section(f"Claude Sonnet Phase 4.1 Pre-Execution Check: {args.sonnet_precheck}")
+        print_section(f"Claude Sonnet Phase 4.2 Pre-Check Audit Gate: {args.sonnet_precheck}")
         precheck_content = args.sonnet_precheck
         if os.path.isfile(args.sonnet_precheck):
             try:
-                with open(args.sonnet_precheck, "r", encoding="utf-8") as f_pre:
-                    precheck_content = f_pre.read()
+                with open(args.sonnet_precheck, "r", encoding="utf-8", errors="replace") as f_pre:
+                    precheck_content = f"=== IMPLEMENTATION PLAN ===\n{f_pre.read()}\n"
             except Exception as e:
-                print(f"⚠️ Не вдалося прочитати файл для перевірки: {e}", file=sys.stderr)
+                print(f"⚠️ Не вдалося прочитати файл плану для перевірки: {e}", file=sys.stderr)
+
+        ctx_file = getattr(args, "precheck_context", None)
+        if ctx_file:
+            real_ctx_path = os.path.realpath(ctx_file)
+            if not os.path.isfile(real_ctx_path):
+                print(f"⚠️ Помилка: Вказаний файл контексту не знайдено: {ctx_file}", file=sys.stderr)
+            else:
+                try:
+                    file_size = os.path.getsize(real_ctx_path)
+                    if file_size > 32768:
+                        print(f"⚠️ Попередження: Розмір контексту ({file_size} Б) перевищує 32 КБ. Контекст буде обрізано.", file=sys.stderr)
+                    with open(real_ctx_path, "r", encoding="utf-8", errors="replace") as f_ctx:
+                        raw_ctx = f_ctx.read(32768)
+                    sanitized_ctx = sanitize_sensitive_tokens(raw_ctx)
+                    precheck_content += f"\n=== ASSEMBLED CONTEXT (Phase 4.1) ===\n{sanitized_ctx}\n"
+                except Exception as e:
+                    print(f"⚠️ Не вдалося прочитати файл контексту: {e}", file=sys.stderr)
+        else:
+            print("ℹ️ Режим аудиту плану без зовнішнього контексту (Phase 4.1 context file omitted).")
+
+        precheck_content = sanitize_sensitive_tokens(precheck_content)
         res = query_claude_engine(precheck_content, mode="precheck")
+
+        import re
+        if re.search(r'^\s*(?:```(?:bash|sh)?\s*\n\s*)?cd\s+|(?:for\s+\w+\s+in\s+)', res, re.MULTILINE):
+            print("⚠️ [ZERO-SHELL WARNING] У відповіді моделі виявлено спробу шелл-інструкції (cd/loop). Ігнорувати виконання!", file=sys.stderr)
+
         print(res)
         return 0
 
@@ -983,8 +1255,12 @@ def main():
     if args.synthesize_script:
         return synthesize_script_file(args.synthesize_script, args.out, model=args.model)
 
-    # 7. Інспекція форматів через Antigravity_Mgr/tools/phase1_inspect.py (Фаза 1)
-    inspect_tool = "/home/hills/Documents/Antigravity_Mgr/tools/phase1_inspect.py"
+    # 7. Інспекція форматів через phase1_inspect.py (Фаза 1)
+    inspect_tool = os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py")
+    if not os.path.exists(inspect_tool):
+        inspect_tool = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "inspect", "phase1_inspect.py"))
+    if not os.path.exists(inspect_tool):
+        inspect_tool = os.path.abspath(os.path.join(os.path.dirname(__file__), "phase1_inspect.py"))
     if args.inspect_ast:
         return subprocess.run([sys.executable, inspect_tool, "--ast", args.inspect_ast]).returncode
     if args.inspect_docx:
