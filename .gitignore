@@ -22,3 +22,9 @@ antigravity_provenance_ledger.json
 .DS_Store
 Thumbs.db
 scratch/
+
+# Build and distribution artifacts
+distribution/
+*_state.json
+
+
