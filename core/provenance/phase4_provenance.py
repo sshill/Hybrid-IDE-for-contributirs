@@ -32,6 +32,9 @@ GENERATIVE_MODELS_ALLOWLIST = {
     "qwen2.5-coder:7b": 1,
     "openai/gpt-oss-120b": 2,
     "gpt-oss-120b": 2,
+    "claude-3-5-sonnet-20241022": 4,
+    "claude-3.5-sonnet": 4,
+    "copilot-cli": 4.5,
 }
 
 RESERVED_TTL_SECONDS = 120.0

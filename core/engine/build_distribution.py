@@ -400,7 +400,9 @@ def build_package():
         os.path.join(PROJECT_ROOT, "core", "hooks", "post_tool_hook.py"),
         os.path.join(PROJECT_ROOT, "core", "hooks", "post_tool_hook.sh"),
         os.path.join(PROJECT_ROOT, "core", "hooks", "stop_hook.sh"),
-        os.path.join(PROJECT_ROOT, "core", "hooks", "__init__.py")
+        os.path.join(PROJECT_ROOT, "core", "hooks", "__init__.py"),
+        os.path.join(PROJECT_ROOT, "core", "enclave", "enclave_daemon.py"),
+        os.path.join(PROJECT_ROOT, "core", "enclave", "__init__.py")
     ]
 
     for src in core_files:

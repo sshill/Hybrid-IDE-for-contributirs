@@ -724,7 +724,7 @@ def main():
             abs_script = os.path.abspath(os.path.join(cmd_cwd, script_to_check) if not os.path.isabs(script_to_check) else script_to_check)
             script_base = os.path.basename(abs_script)
             framework_tools = (
-                "diagnostic_runner.py", "phase5_verify.py", "validate_general_policy.py",
+                "diagnostic_runner.py", "enclave_daemon.py", "phase5_verify.py", "validate_general_policy.py",
                 "verify_remote_ci.py", "phase4_provenance.py", "phase2_router.py",
                 "phase1_inspect.py", "check_rag_health.py"
             )

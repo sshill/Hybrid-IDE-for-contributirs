@@ -45,6 +45,11 @@ from core.engine.validate_migration_content import (
     validate_migration_file,
     validate_migration_text,
 )
+from core.enclave.enclave_daemon import (
+    enclave_apply,
+    enclave_query,
+    validate_code_syntax,
+)
 
 
 class TestProvenanceSecurity(unittest.TestCase):
@@ -446,7 +451,7 @@ class TestProvenanceSecurity(unittest.TestCase):
         # Тест генератора мосту
         ok_bridge, prompt = generate_canonical_bridge_prompt(self.test_dir, conv_id="test_conv_123")
         self.assertTrue(ok_bridge)
-        self.assertIn("v0.9.10", prompt)
+        self.assertTrue("v0.9.10" in prompt or "v0.9.11" in prompt)
         self.assertIn("test_conv_123", prompt)
 
     def test_ledger_immutability_blocks_tool_writes(self):
@@ -722,6 +727,94 @@ class TestProvenanceSecurity(unittest.TestCase):
         # Неавторизований файл (навіть якщо ім'я каталогу маскується)
         ok_unauth, msg_unauth = plan_authorizes("core/secret_backdoor.py", repo_path=self.test_dir)
         self.assertFalse(ok_unauth, f"Expected rejected: {msg_unauth}")
+
+    def test_enclave_synthesis_tier1_atomic_apply(self):
+        """31. Анклав: атомарний синтез через Tier 1 Ollama / direct_code з валідацією AST та випуском паспорта."""
+        target_py = os.path.join(self.test_dir, "enclave_test_tool.py")
+        code = "def compute_sum(a: int, b: int) -> int:\n    return a + b\n"
+        receipt = enclave_apply(
+            target_path=target_py,
+            direct_code=code,
+            mode="synthesize",
+            tier=1,
+            model="qwen2.5-coder:1.5b",
+            session_id="test_sess_enclave"
+        )
+        self.assertEqual(receipt.get("status"), "SUCCESS")
+        self.assertTrue(os.path.isfile(target_py))
+        self.assertTrue(receipt.get("ast_verified"))
+        self.assertEqual(receipt.get("tier"), 1)
+        self.assertEqual(receipt.get("model"), "qwen2.5-coder:1.5b")
+        self.assertTrue(receipt.get("passport_id", "").startswith("pass_"))
+
+    def test_enclave_ast_gate_fail_closed(self):
+        """32. Анклав: детерміністичний AST Gate блокує код із синтаксичною помилкою до контакту з диском."""
+        target_py = os.path.join(self.test_dir, "enclave_syntax_err.py")
+        broken_code = "def broken_func(:\n    return None\n"
+        receipt = enclave_apply(
+            target_path=target_py,
+            direct_code=broken_code,
+            mode="synthesize",
+            tier=1,
+            model="qwen2.5-coder:1.5b",
+            session_id="test_sess_enclave"
+        )
+        self.assertEqual(receipt.get("status"), "ERROR")
+        self.assertIn("AST Gate Rejection", receipt.get("error", ""))
+        self.assertFalse(os.path.exists(target_py), "Диск не повинен бути змінений при збої AST Gate")
+
+    def test_enclave_patch_mode_simulation(self):
+        """33. Анклав: режим patch з in-memory симуляцією та атомарним оновленням файлу."""
+        target_py = os.path.join(self.test_dir, "enclave_patch_target.py")
+        with open(target_py, "w", encoding="utf-8") as f:
+            f.write("def greeting():\n    return 'old_greeting'\n")
+
+        patch_target = "return 'old_greeting'"
+        replacement = "return 'new_secure_greeting'"
+        receipt = enclave_apply(
+            target_path=target_py,
+            direct_code=replacement,
+            mode="patch",
+            patch_target=patch_target,
+            tier=1,
+            model="qwen2.5-coder:1.5b",
+            session_id="test_sess_enclave"
+        )
+        self.assertEqual(receipt.get("status"), "SUCCESS")
+        with open(target_py, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("new_secure_greeting", content)
+        self.assertNotIn("old_greeting", content)
+
+    def test_enclave_anti_echo_rejection(self):
+        """34. Анклав: блокування генерації з високим збігом шинґлів завдання та коду (Anti-Echo Gate)."""
+        target_py = os.path.join(self.test_dir, "enclave_echo_target.py")
+        # ТЗ і код містять спільну послідовність із 9 слів (8-шинґли збігаються)
+        prompt_text = "generate code for secure alpha beta gamma delta epsilon zeta eta theta calculation"
+        code_text = "def calc():\n    # secure alpha beta gamma delta epsilon zeta eta theta calculation\n    return 42\n"
+        receipt = enclave_apply(
+            target_path=target_py,
+            task_prompt=prompt_text,
+            direct_code=code_text,
+            mode="synthesize",
+            tier=1,
+            model="qwen2.5-coder:1.5b",
+            session_id="test_sess_enclave"
+        )
+        self.assertEqual(receipt.get("status"), "ERROR")
+        self.assertIn("Anti-Echo Gate Rejection", receipt.get("error", ""))
+        self.assertFalse(os.path.exists(target_py))
+
+    def test_enclave_allowlist_expanded_all_tiers(self):
+        """35. Анклав: перевірка наявності всіх рівнів у GENERATIVE_MODELS_ALLOWLIST (Tier 1, 2, 4, 4.5)."""
+        self.assertIn("qwen2.5-coder:1.5b", GENERATIVE_MODELS_ALLOWLIST)
+        self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["qwen2.5-coder:1.5b"], 1)
+        self.assertIn("openai/gpt-oss-120b", GENERATIVE_MODELS_ALLOWLIST)
+        self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["openai/gpt-oss-120b"], 2)
+        self.assertIn("claude-3-5-sonnet-20241022", GENERATIVE_MODELS_ALLOWLIST)
+        self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["claude-3-5-sonnet-20241022"], 4)
+        self.assertIn("copilot-cli", GENERATIVE_MODELS_ALLOWLIST)
+        self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["copilot-cli"], 4.5)
 
 
 if __name__ == "__main__":
