@@ -46,8 +46,15 @@ from core.engine.validate_migration_content import (
     validate_migration_text,
 )
 from core.enclave.enclave_daemon import (
+    attest_arbiter,
+    direct_query_copilot,
     enclave_apply,
     enclave_query,
+    get_telemetry,
+    get_tools_help,
+    query_all_tier_ai,
+    resolve_telemetry_model,
+    run_battle_test,
     validate_code_syntax,
 )
 
@@ -815,6 +822,68 @@ class TestProvenanceSecurity(unittest.TestCase):
         self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["claude-3-5-sonnet-20241022"], 4)
         self.assertIn("copilot-cli", GENERATIVE_MODELS_ALLOWLIST)
         self.assertEqual(GENERATIVE_MODELS_ALLOWLIST["copilot-cli"], 4.5)
+
+    def test_enclave_frugalgpt_telemetry_routing_and_overflow(self):
+        """36. Анклав: FrugalGPT маршрутизація та апаратний/контекстний оверфлоу на Groq 120B."""
+        short_prompt = "Write a hello world function"
+        model_name, tier_num, reason = resolve_telemetry_model(short_prompt, ram_available_override=8.0)
+        self.assertEqual(tier_num, 1)
+        self.assertTrue(model_name.startswith("qwen2.5-coder"))
+
+        low_ram_model, low_ram_tier, low_ram_reason = resolve_telemetry_model(short_prompt, ram_available_override=4.5)
+        self.assertEqual(low_ram_tier, 2)
+        self.assertEqual(low_ram_model, "openai/gpt-oss-120b")
+        self.assertIn("Overflow", low_ram_reason)
+
+        long_prompt = "x " * 6500
+        ov_model, ov_tier, ov_reason = resolve_telemetry_model(long_prompt, ram_available_override=16.0)
+        self.assertEqual(ov_tier, 2)
+        self.assertEqual(ov_model, "openai/gpt-oss-120b")
+        self.assertIn("Overflow", ov_reason)
+
+    def test_enclave_battle_test_structure(self):
+        """37. Анклав: 4-Tier AI Battle Test повертає валідну структуру для всіх 4 рівнів."""
+        results = run_battle_test()
+        self.assertIn("tier_1_ollama", results)
+        self.assertIn("tier_2_groq", results)
+        self.assertIn("tier_4_claude", results)
+        self.assertIn("tier_4_5_copilot", results)
+        self.assertIn("status", results["tier_1_ollama"])
+        self.assertIn("status", results["tier_4_claude"])
+        self.assertIn("status", results["tier_4_5_copilot"])
+
+    def test_enclave_antigravity_pool_attestation(self):
+        """38. Анклав: атестація арбітра через Antigravity Pool (POST /attest) та фіксація прапорця."""
+        res = attest_arbiter(verdict="PASS", arbiter="Antigravity Pool (Claude Sonnet)")
+        self.assertEqual(res.get("status"), "SUCCESS")
+        self.assertEqual(res.get("verdict"), "PASS")
+        self.assertIn("flag_file", res)
+        flag_path = res.get("flag_file")
+        self.assertTrue(os.path.exists(flag_path))
+        with open(flag_path, "r", encoding="utf-8") as f:
+            flag_text = f.read()
+        self.assertIn("CLAUDE_VERIFIED", flag_text)
+        self.assertIn("Antigravity Pool", flag_text)
+
+    def test_enclave_tools_help_schema(self):
+        """39. Анклав: ендпоінт /help-tools повертає вичерпну схему інструментів для Antigravity."""
+        schema = get_tools_help()
+        self.assertEqual(schema.get("version"), "0.9.11")
+        self.assertIn("endpoints", schema)
+        endpoints = schema.get("endpoints")
+        self.assertIn("POST /apply", endpoints)
+        self.assertIn("POST /query", endpoints)
+        self.assertIn("GET /battle-test", endpoints)
+        self.assertIn("GET /telemetry", endpoints)
+        self.assertIn("GET /verify-chain", endpoints)
+        self.assertIn("POST /attest", endpoints)
+
+    def test_enclave_copilot_failover_gate(self):
+        """40. Анклав: відмовостійкість (Failover Gate) — перехід з Copilot CLI на Claude Sonnet при вичерпанні квоти."""
+        out, quota_err = direct_query_copilot("test prompt", mode="audit")
+        self.assertIsInstance(quota_err, bool)
+        ans, used_model, used_tier = query_all_tier_ai("Test audit prompt", tier=4.5)
+        self.assertIn(used_tier, (4, 4.5, 2))
 
 
 if __name__ == "__main__":

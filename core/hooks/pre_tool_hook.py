@@ -806,6 +806,8 @@ def main():
                 f"python3 {home}/Documents/.agents/scripts/diagnostic_runner.py",
                 "python3 core/engine/diagnostic_runner.py",
                 f"python3 {home}/Documents/Hybrid-IDE-for-contributors/core/engine/diagnostic_runner.py",
+                "python3 core/enclave/enclave_daemon.py",
+                f"python3 {home}/Documents/Hybrid-IDE-for-contributors/core/enclave/enclave_daemon.py",
                 f"python3 {home}/.gemini/config/plugins/hybrid-ide/bin/",
                 "python3 .agents/tools/",
                 f"python3 {home}/Documents/.agents/tools/",

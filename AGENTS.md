@@ -17,17 +17,17 @@
   * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + 30 unit-тестів провененсу + політика 37/37).
   * `core/verify/verify_remote_ci.py` — опитування GitHub Actions CI.
 
-## 2. Реструктуризований конвеєр обробки завдань (v0.9.11)
-1. **Фаза 1: Діагностика (Двоканальна)** — лише читання (Канал A: `git status -sb`, `git ls-files`, `view_file`, `phase1_inspect.py`; Канал B: `search_web`, `read_url_content` після Absence Verification). Шлюз якірних специфікацій (Anchored Grounding Gate) та захист від рекурсивного переказу здогадок (Anti-Echo Gate). Авто-ініціалізація телеметрії.
-2. **Фаза 2: Репорт та план** — формування `implementation_plan.md` з повним переліком змін та AI Routing Matrix.
-3. **Фаза 2.5: Pre-Approval Gate (Tier 4 Claude Sonnet)** — поглиблений аудит плану на відповідність регламенту та відсутність прогалин (`diagnostic_runner.py --sonnet-audit implementation_plan.md`) перед поданням користувачеві.
+## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.11)
+1. **Фаза 1: Діагностика (Двоканальна)** — лише читання (Канал A: `git status -sb`, `git ls-files`, `view_file`, `enclave_daemon.py --telemetry`; Канал B: `search_web`, `read_url_content` після Absence Verification). Авто-ініціалізація 2D-телеметрії.
+2. **Фаза 2: Репорт та план** — формування `implementation_plan.md` з обов'язковим віджетом індикатора контексту (`[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`) та AI Routing Matrix.
+3. **Фаза 2.5: Pre-Approval Gate (Tier 4 Claude Sonnet)** — аудит плану через Анклав (`enclave_daemon.py --query <plan> --tier 4 --mode audit` або Antigravity Pool Attestation Gate `POST /attest`).
 4. **Фаза 3: Схвалення користувача** — обов'язкова зупинка (`+` — санкція на Фазу 4, `+!` — Attention Gate, `++` — санкція на реліз у Фазі 5). Фіксація `approved_plan.sha256`.
-5. **Фаза 4.1: Pre-Execution Context Assembly** — збірка всієї інформації та вихідного коду за планом оркестратором Antigravity (читання через `view_file`, `git -C <dir> status -sb`, zero-shell).
-6. **Фаза 4.2: Pre-Check Audit Gate (Tier 4 Claude Sonnet)** — семантичний аудит плану та зібраного контенту (`diagnostic_runner.py --sonnet-precheck implementation_plan.md`) перед мутацією коду (Zero-Shell Constraint).
-7. **Фаза 4.3: Синтез коду та випуск паспорта** — генерація коду моделями ШІ (Tier 1 Ollama / Tier 2 Groq з білого списку `GENERATIVE_MODELS_ALLOWLIST`), перевірка шинґлів (Anti-Echo), AST-валідація та випуск активного криптографічного паспорта з HMAC-SHA256 підписом (`mint_passport` -> `MINTED`).
+5. **Фаза 4.1: Pre-Execution Context Assembly** — збірка всієї інформації та вихідного коду за планом оркестратором Antigravity (читання через `view_file`, `git show`, zero-shell).
+6. **Фаза 4.2: Pre-Check Audit Gate (Tier 4 Claude Sonnet)** — семантичний аудит плану та контексту через Анклав (`enclave_daemon.py --query <context> --tier 4 --mode precheck`).
+7. **Фаза 4.3: Синтез коду та первинний контроль Анклаву** — генерація коду суворо через Анклав на моделі Ollama (`1.5b`, `3b` або `7b`) відповідно до телеметрії Фази 1 (при оверфлоу $>3000$ tok або RAM $<6$ ГБ — автоматичний перехід на Groq `openai/gpt-oss-120b`, `llama-3.3-70b`). Анклав здійснює Anti-Echo ($ \le 0.25$), AST syntax gate, симуляцію заміни, обчислення SHA256 та випуск HMAC-SHA256 паспорта (`MINTED -> RESERVED -> APPLIED`).
 8. **Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт** — резервування паспорта (`reserve_passport` -> `RESERVED`) через in-memory симуляцію заміни (`simulate_replacement`), верифікація після запису (`apply_passport` -> `APPLIED` з перепідписом), локальна валідація Python AST, `py_compile`. Contributor Mode захищає ядро через `approved_plan.sha256`.
-9. **Фаза 4.5: Pre-Release E2E Arbiter (Tier 4.5 Copilot CLI)** — повний аудит модифікованого пакета через GitHub Copilot CLI (`diagnostic_runner.py --copilot-audit`) та верифікація ланцюга HMAC-паспортів (`phase4_provenance.py --verify-chain`).
-10. **Фаза 5.1: Dual-Audit Report & Verification** — фінальний звіт `walkthrough.md` із протоколом 2 аудитів (Claude Sonnet + Copilot CLI), складом пакета та детерміністичними тестами `phase5_verify.py` (30/30 unit-тести + 37/37 перевірок).
+9. **Фаза 4.5: Pre-Release E2E Arbiter з Failover Gate** — повний аудит модифікованого пакета через Copilot CLI (`enclave_daemon.py --query <diff> --tier 4.5 --mode audit`). Якщо Copilot недоступний (вичерпано квоту) — автоматичне перенаправлення на верифікацію до Claude Sonnet (Tier 4). Тільки після успішної верифікації публікується репорт Фази 4 з обов'язковою фіксацією SHA-256 та Passport ID від Анклаву.
+10. **Фаза 5.1: Dual-Audit Report & Verification** — фінальний звіт `walkthrough.md`, перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (35 unit-тестів + 37/37 перевірок).
 
 ## 3. Правила коду та гігієни
 - **Zero-Dep:** Жодних сторонніх PyPI бібліотек.
