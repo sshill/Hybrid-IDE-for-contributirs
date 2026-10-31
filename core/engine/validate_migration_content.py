@@ -35,9 +35,9 @@ NEGATION_PREFIX_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Outdated version claims: specifically v0.9.4 through v0.9.9 as the active target version
+# Outdated version claims: specifically v0.9.4 through v0.9.10 as the active target version
 OUTDATED_ACTIVE_VERSION_PATTERN = re.compile(
-    r'(?:актуальний\s+Регламент|Версія\s+Регламенту:?|Hybrid\s+IDE\s+Policy)\s*[`"\'*]*(?:v?0\.9\.[4-9])\b(?!0)',
+    r'(?:актуальний\s+Регламент|Версія\s+Регламенту:?|Hybrid\s+IDE\s+Policy)\s*[`"\'*]*(?:v?0\.9\.(?:[4-9]|10))\b',
     re.IGNORECASE
 )
 
@@ -238,10 +238,10 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
     if not os.path.isfile(walkthrough_cand):
         walkthrough_cand = os.path.expanduser("~/.gemini/antigravity/brain/walkthrough.md")
 
-    prompt = f"""# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.10)
+    prompt = f"""# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.11)
 
 ## 1. Метадані стану та середовища
-- **Версія Регламенту:** `v0.9.10` (Cryptographic Hash Passports, Shell State Isolation & In-Memory Simulation)
+- **Версія Регламенту:** `v0.9.11` (Trusted Enclave Architecture, Multi-Tier AI Gateway, Schema 1.2 HMAC Passports)
 - **Домен:** `{domain_name}` (`{ws}`)
 - **Parent Conversation ID:** `{cid}`
 - **Active Git Branch:** `{git_branch}` (коміт `{git_commit}`)
@@ -254,22 +254,15 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
 ## 2. Імперативний стартовий протокол (Strict Step-by-Step Gate)
 
 ### 🛑 Крок 1: Phase 1 Status Banner та 2D-телеметрія контексту
-Виконати динамічний вимір метрик (`core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
+Виконати динамічний вимір метрик (`core/enclave/enclave_daemon.py --telemetry` або `core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
 `🎯 [DOMAIN: {domain_name} | HOST: Linux/Debian]`
 `<Індикатор 🟢/🟡/🔴> [CONTEXT: <S> кроків (~<tok>k tok) | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
 *(Обов'язково вивести віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у чат!)*
 
-### 🛑 Крок 2: Бойова перевірка ВСІХ 4 рівнів ШІ-матриці
-Виконати окремими одиночними викликами (`BypassSandbox: true`) та вивести стандартизовані віджети `[AI Invocation Event]` для кожного провайдера:
-
-1. **Tier 1 (Local Edge Ollama):**
-   `python3 core/engine/diagnostic_runner.py --ollama-query "Ping: confirm status in 5 words" --model qwen2.5-coder:1.5b`
-2. **Tier 2 (Cloud Fallback Hub Groq LPU):**
-   `python3 core/engine/diagnostic_runner.py --groq-query "Ping: confirm status in 5 words"`
-3. **Tier 4 (Claude Sonnet 5.5 / Arbiter):**
-   Сформувати підтвердження готовності Шлюзу 2.5 та 4.2 до аудиту контрактів та сигнатур (`--sonnet-query`).
-4. **Tier 4.5 (GitHub Copilot CLI — Pre-Release Arbiter Probe):**
-   `copilot --version` (перевірка зв'язку та готовності CLI; запуск prompt `-p` потребує схвалення `+`).
+### 🛑 Крок 2: Бойова перевірка ШІ-матриці через Довірений Анклав
+Виконати єдиною пакетною командою (`BypassSandbox: true`):
+`python3 core/enclave/enclave_daemon.py --battle-test`
+*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe)*
 
 ### 🛑 Крок 3: Лог інтеграції плагіна та доменного оверлею
 Сформувати та вивести структурований звіт:
@@ -279,18 +272,39 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
 ======================================================================
 [Step 1: Global Plugin Discovery]
   - Шлях плагіна:   ~/.gemini/config/plugins/hybrid-ide/
-  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.10)
+  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.11)
   - Хуки безпеки:   hooks.json (PreToolUse OS Gates, PostToolUse Breaker, Stop)
   - Статус хуків:   🟢 Активно (єдиний глобальний обробник)
 
 [Step 2: Constitutional Kernel Audit]
-  - Файл ядра:      rules/AGENTS.md
+  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.11)
   - OS Hard Gates:  Zero Inline-Eval, Shell State Isolation, Cryptographic Hash Passports, In-Memory Simulation
   - Дисципліна:     5 обов'язкових фаз, Anchored Grounding Gate, Anti-Echo Protocol
 
-[Step 3: Domain Overlay Resolution]
+[Step 3: Domain Overlay Resolution & Core Policies]
   - Файл оверлею:   {ws}/AGENTS.md
-  - Специфікація:   Шлюз 2.5 (Sonnet Pre-Approval), Шлюз 4.2 (Sonnet Pre-Check), Pre-Release Gate (Copilot CLI)
+  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 37/37)
+  - Двогейтовий суверенітет: '+' для локальних змін/коміту; '++' для релізу/пушу
+  - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
+
+[Step 3.1: Tool Catalog & Satellite Interfaces]
+  - Головні інструменти Анклаву (core/enclave/enclave_daemon.py):
+    * POST /apply (--target, --task | --direct-code) — атомарний синтез/патч
+    * POST /query (--query) — суверенний мульти-Tier ШІ-шлюз (FrugalGPT & Failover)
+    * GET /battle-test (--battle-test) — бойовий 4-Tier тест
+    * GET /telemetry (--telemetry) — 2D-телеметрія сесії та RAM
+    * GET /help (--help-tools) — схема та параметри контрактів
+    * GET /verify-chain (--verify-chain) — верифікація ланцюга паспортів
+    * POST /attest (--attest-arbiter) — атестаційний гейт Antigravity Pool
+  - Супутні та зовнішні інтерфейси:
+    * LinkedIn Developer API: OAuth 2.0 у ~/.env (LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI)
+    * Email & SMTP нотифікації: системні сповіщення та релізи
+    * Контрактний довідник: core/enclave/ENCLAVE_INTERFACE.md (читання через view_file)
+    * Верифікатор: core/verify/phase5_verify.py (40 unit + 37/37 перевірок)
+
+[Step 3.2: Anchored Instrumental Requests Protocol]
+  - Обов'язкова звірка з ENCLAVE_INTERFACE.md або --help-tools перед запитом
+  - Тільки параметризовані виклики (target_path, task_prompt, direct_code, patch_target, start_line, end_line, mode, tier)
 
 [Step 4: Decoupling & Binding Verdict]
   - Статус GEMINI:  🚫 Декупловано з підпроєктів (файли GEMINI.md вичищено)

@@ -6,6 +6,8 @@
 - **Призначення:** Відкрита кодова база фреймворку Hybrid-IDE, інструменти Antigravity та регламент.
 - **Мови:** Python 3.10–3.13 (суворо stdlib only, zero-dep), POSIX Bash.
 - **Архітектура модулів:**
+  * `core/enclave/enclave_daemon.py` — Довірений Анклав: єдиний ШІ-шлюз (Ollama, Groq, Claude Sonnet, Copilot CLI), первинний контроль коду, FrugalGPT та Failover.
+  * `core/enclave/ENCLAVE_INTERFACE.md` — інструментальний контракт Анклаву для Antigravity.
   * `core/engine/diagnostic_runner.py` — діагностичний інференс ШІ: Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet (`--sonnet-query`, `--sonnet-audit`, `--sonnet-precheck`), Tier 4.5 Copilot CLI, Semantic Constraint Checker & Pre-Audit Gate, in-process паспортний емітент та 8-token shingle overlap checker.
   * `core/hooks/pre_invocation_hook.py` (.sh) — PreInvocation Lifecycle Hook: авто-старт нових чатів (`invocationNum == 1`), ініціалізація Brain-First телеметрії та ін'єкція ephemeral-настанов регламенту.
   * `core/hooks/pre_tool_hook.py` — OS Hard Gates: Zero Inline-Eval, Ledger Immutability Gate, Secret Isolation Gate, Deny-by-reference Shell State Isolation, Cryptographic Hash Passport Integrity Gate, In-Memory Replacement Simulation (`simulate_replacement`), Contributor Mode (`approved_plan.sha256`) та Dynamic Plan-Aware Step Budget.
@@ -27,21 +29,40 @@
 7. **Фаза 4.3: Синтез коду та первинний контроль Анклаву** — генерація коду суворо через Анклав на моделі Ollama (`1.5b`, `3b` або `7b`) відповідно до телеметрії Фази 1 (при оверфлоу $>3000$ tok або RAM $<6$ ГБ — автоматичний перехід на Groq `openai/gpt-oss-120b`, `llama-3.3-70b`). Анклав здійснює Anti-Echo ($ \le 0.25$), AST syntax gate, симуляцію заміни, обчислення SHA256 та випуск HMAC-SHA256 паспорта (`MINTED -> RESERVED -> APPLIED`).
 8. **Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт** — резервування паспорта (`reserve_passport` -> `RESERVED`) через in-memory симуляцію заміни (`simulate_replacement`), верифікація після запису (`apply_passport` -> `APPLIED` з перепідписом), локальна валідація Python AST, `py_compile`. Contributor Mode захищає ядро через `approved_plan.sha256`.
 9. **Фаза 4.5: Pre-Release E2E Arbiter з Failover Gate** — повний аудит модифікованого пакета через Copilot CLI (`enclave_daemon.py --query <diff> --tier 4.5 --mode audit`). Якщо Copilot недоступний (вичерпано квоту) — автоматичне перенаправлення на верифікацію до Claude Sonnet (Tier 4). Тільки після успішної верифікації публікується репорт Фази 4 з обов'язковою фіксацією SHA-256 та Passport ID від Анклаву.
-10. **Фаза 5.1: Dual-Audit Report & Verification** — фінальний звіт `walkthrough.md`, перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (35 unit-тестів + 37/37 перевірок).
+10. **Фаза 5.1: Dual-Audit Report & Verification** — фінальний звіт `walkthrough.md`, перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (40 unit-тестів + 37/37 перевірок).
 
-## 3. Правила коду та гігієни
+## 3. Каталог інструментів Довіреного Анклаву та супутніх інтерфейсів (Tool Catalog)
+- **Головні інструменти Анклаву (`core/enclave/enclave_daemon.py`):**
+  * `POST /apply` (`--target <файл> --task <ТЗ> | --direct-code <код>`) — атомарний синтез/патч із первинним контролем.
+  * `POST /query` (`--query <промпт>`) — суверенний ШІ-шлюз із підтримкою FrugalGPT та Failover.
+  * `GET /battle-test` (`--battle-test`) — пакетний тест 4 рівнів ШІ (Ollama, Groq, Claude, Copilot probe).
+  * `GET /telemetry` (`--telemetry`) — 2D-телеметрія (кроки, Nin/Nout, вільна RAM, зона контексту).
+  * `GET /help` (`--help-tools`) — інструментальна схема викликів.
+  * `GET /verify-chain` (`--verify-chain`) — перевірка ланцюга паспортів леджера.
+  * `POST /attest` (`--attest-arbiter [VERDICT]`) — вердикт арбітра Antigravity Pool.
+- **Супутні та інтеграційні інтерфейси:**
+  * **LinkedIn Developer API:** OAuth 2.0 у `~/.env` (`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI`) для інтеграцій.
+  * **Email & SMTP нотифікації:** модулі відправлення системних сповіщень та звітів.
+  * **Контрактний довідник:** [`core/enclave/ENCLAVE_INTERFACE.md`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/enclave/ENCLAVE_INTERFACE.md) (читається через `view_file` без виклику шеллу).
+  * **Верифікаційні інструменти:** [`core/verify/phase5_verify.py`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/verify/phase5_verify.py) (40 unit-тестів + 37/37 перевірок політики).
+- **Регламент інструментальних запитів до Анклаву (Anchored Instrumental Requests):**
+  * Оркестратору заборонено надсилати неструктуровані чи сліпі промпти («зроби щось», «напиши код»).
+  * Перед кожним викликом оркестратор зобов'язаний звіритися з інтерфейсом `core/enclave/ENCLAVE_INTERFACE.md` або викликом `enclave_daemon.py --help-tools`.
+  * Усі запити мають бути суто параметризованими: точний шлях (`target_path`), конкретне ТЗ (`task_prompt`) або код (`direct_code`), при модифікації — точний рядок (`patch_target`) та номери рядків (`start_line`, `end_line`), режим (`synthesize` / `patch`), рівень моделі (`tier`).
+
+## 4. Правила коду та гігієни
 - **Zero-Dep:** Жодних сторонніх PyPI бібліотек.
 - **Bytecode:** Обов'язково `sys.dont_write_bytecode = True` у всіх `.py`.
 - **Bash:** `set -euo pipefail` та коментарі на початку скрипта.
 - **Brain-First Storage:** Усі сесійні файли (кроки, контракти, історія, прапорці, леджер, паспорти) зберігаються у `<artifactDirectoryPath>/.system_generated/`, що гарантує захист від видалення при перезавантаженні ОС.
 
-## 4. Верифікація та реліз (Фаза 5)
-- **Локальна:** `python3 core/verify/phase5_verify.py` (30 unit-тестів + 37/37 перевірок).
+## 5. Верифікація та реліз (Фаза 5)
+- **Локальна:** `python3 core/verify/phase5_verify.py` (40 unit-тестів + 37/37 перевірок).
 - **Синтаксис:** `python3 -m py_compile <шлях_до_файлу.py>`.
 - **CI перевірка:** `python3 core/verify/verify_remote_ci.py`.
 - **Публікація:** `./push_to_github.sh` (суворо після команди `++`).
 
-## 5. Стиль комітів
+## 6. Стиль комітів
 - `<type>(<scope>): <опис> [generated: <model> | verified: antigravity]`
 - Передрелізний аудит: `chore(release): ... [audited: copilot-cli | verified: claude | verified: antigravity]`
 
