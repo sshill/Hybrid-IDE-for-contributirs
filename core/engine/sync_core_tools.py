@@ -26,6 +26,7 @@ CORE_FILES = [
     REPO_ROOT / "core" / "provenance" / "phase4_provenance.py",
     REPO_ROOT / "core" / "router" / "phase2_router.py",
     REPO_ROOT / "core" / "verify" / "phase5_verify.py",
+    REPO_ROOT / "core" / "verify" / "chat_context_auditor.py",
     REPO_ROOT / "core" / "verify" / "verify_remote_ci.py",
     REPO_ROOT / "core" / "verify" / "validate_general_policy.py",
     # Core Lifecycle Hooks
@@ -44,7 +45,7 @@ TARGET_DIRS = [
     Path.home() / "Documents" / "Antigravity_Mgr" / "tools",
 ]
 
-WHITELISTED_SKILLS = ["bridge", "reglament", "principal", "supervisor"]
+WHITELISTED_SKILLS = ["bridge", "reglament", "principal", "supervisor", "audit"]
 
 SKILL_TARGET_DIRS = [
     Path.home() / ".gemini" / "config" / "skills",

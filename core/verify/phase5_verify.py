@@ -107,6 +107,21 @@ def main():
                 sys.stderr.write("❌ Provenance Security Unit Tests Failed!\n")
                 sys.exit(res_prov.returncode)
 
+        # 1.7. Run Chat Context Auditor tests and active session audit (Kernel v0.9.12)
+        chat_test_path = os.path.join(REPO_ROOT, 'core', 'verify', 'test_chat_context_auditor.py')
+        if os.path.isfile(chat_test_path):
+            res_chat_test = subprocess.run([sys.executable, "-m", "unittest", "core.verify.test_chat_context_auditor"], cwd=REPO_ROOT)
+            if res_chat_test.returncode != 0:
+                sys.stderr.write("❌ Chat Context Auditor Unit Tests Failed!\n")
+                sys.exit(res_chat_test.returncode)
+
+        chat_auditor_path = os.path.join(REPO_ROOT, 'core', 'verify', 'chat_context_auditor.py')
+        if os.path.isfile(chat_auditor_path):
+            res_chat_audit = subprocess.run([sys.executable, chat_auditor_path, "--current-session", "--strict"], cwd=REPO_ROOT)
+            if res_chat_audit.returncode != 0:
+                sys.stderr.write("❌ Phase 4/Phase 5 Chat Context Audit Violation Detected! Release blocked.\n")
+                sys.exit(res_chat_audit.returncode)
+
         # 2. Run the general policy validator with deterministic policy path
         run_validator(VALIDATOR_PATH, policy_path)
 

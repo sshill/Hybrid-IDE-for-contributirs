@@ -63,6 +63,8 @@ def verify_contributor_plan_sanction(brain_state_dir: str, abs_target: str, base
     Перевірка санкції Contributor Mode для ядра (Kernel v0.9.11).
     Використовує єдиний канонічний авторизатор plan_authorizes() із phase4_provenance.
     """
+    if brain_state_dir and os.path.isdir(brain_state_dir):
+        os.environ["HYBRID_IDE_BRAIN_DIR"] = os.path.dirname(brain_state_dir)
     prov_hooks = _import_provenance_hooks()
     plan_auth_fn = prov_hooks[2] if len(prov_hooks) > 2 else None
     if plan_auth_fn:
@@ -726,7 +728,7 @@ def main():
             framework_tools = (
                 "diagnostic_runner.py", "enclave_daemon.py", "phase5_verify.py", "validate_general_policy.py",
                 "verify_remote_ci.py", "phase4_provenance.py", "phase2_router.py",
-                "phase1_inspect.py", "check_rag_health.py"
+                "phase1_inspect.py", "check_rag_health.py", "chat_context_auditor.py"
             )
             is_framework_tool = script_base in framework_tools or "/core/" in abs_script
 

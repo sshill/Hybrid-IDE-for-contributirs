@@ -29,7 +29,8 @@
 7. **Фаза 4.3: Синтез коду та первинний контроль Анклаву** — генерація коду суворо через Анклав на моделі Ollama (`1.5b`, `3b` або `7b`) відповідно до телеметрії Фази 1 (при оверфлоу $>3000$ tok або RAM $<6$ ГБ — автоматичний перехід на Groq `openai/gpt-oss-120b`, `llama-3.3-70b`). Анклав здійснює Anti-Echo ($ \le 0.25$), AST syntax gate, симуляцію заміни, обчислення SHA256 та випуск HMAC-SHA256 паспорта (`MINTED -> RESERVED -> APPLIED`).
 8. **Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт** — резервування паспорта (`reserve_passport` -> `RESERVED`) через in-memory симуляцію заміни (`simulate_replacement`), верифікація після запису (`apply_passport` -> `APPLIED` з перепідписом), локальна валідація Python AST, `py_compile`. Contributor Mode захищає ядро через `approved_plan.sha256`.
 9. **Фаза 4.5: Pre-Release E2E Arbiter з Failover Gate** — повний аудит модифікованого пакета через Copilot CLI (`enclave_daemon.py --query <diff> --tier 4.5 --mode audit`). Якщо Copilot недоступний (вичерпано квоту) — автоматичне перенаправлення на верифікацію до Claude Sonnet (Tier 4). Тільки після успішної верифікації публікується репорт Фази 4 з обов'язковою фіксацією SHA-256 та Passport ID від Анклаву.
-10. **Фаза 5.1: Dual-Audit Report & Verification** — фінальний звіт `walkthrough.md`, перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (40 unit-тестів + 37/37 перевірок).
+10. **Фаза 5.1: Dual-Audit Report & Verification** — перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (40 unit-тестів + 37/37 перевірок + тести `chat_context_auditor.py`).
+11. **Фаза 5.2: Git State Seal Gate** — після успішних тестів оркестратор ЗОБОВ'ЯЗАНИЙ АВТОНОМНО виконати `git add <файли>` та `git commit -m "<type>(<scope>): <опис> [verified: antigravity]"`, отримати Commit SHA та внести його у фінальний `walkthrough.md`. Санкція `+` покриває виконання Фази 4 та локальний коміт Фази 5; санкція `++` потрібна виключно для віддаленого пушу (`push_to_github.sh` / `git push`). Заборонено залишати репозиторій у незапечатаному стані.
 
 ## 3. Каталог інструментів Довіреного Анклаву та супутніх інтерфейсів (Tool Catalog)
 - **Головні інструменти Анклаву (`core/enclave/enclave_daemon.py`):**
@@ -56,9 +57,11 @@
 - **Bash:** `set -euo pipefail` та коментарі на початку скрипта.
 - **Brain-First Storage:** Усі сесійні файли (кроки, контракти, історія, прапорці, леджер, паспорти) зберігаються у `<artifactDirectoryPath>/.system_generated/`, що гарантує захист від видалення при перезавантаженні ОС.
 
-## 5. Верифікація та реліз (Фаза 5)
-- **Локальна:** `python3 core/verify/phase5_verify.py` (40 unit-тестів + 37/37 перевірок).
+## 5. Верифікація, запечатування та реліз (Фаза 5)
+- **Локальна верифікація:** `python3 core/verify/phase5_verify.py` (40 unit-тестів + 37/37 перевірок + тести аудитора).
 - **Синтаксис:** `python3 -m py_compile <шлях_до_файлу.py>`.
+- **Аудит контексту чату:** `python3 core/verify/chat_context_auditor.py --current-session --strict`.
+- **Запечатування стану (Git State Seal Gate):** обов'язковий локальний `git commit` перед публікацією `walkthrough.md`.
 - **CI перевірка:** `python3 core/verify/verify_remote_ci.py`.
 - **Публікація:** `./push_to_github.sh` (суворо після команди `++`).
 
