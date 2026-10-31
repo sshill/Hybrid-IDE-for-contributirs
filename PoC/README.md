@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/sshill/Hybrid-IDE-for-contributirs"><img src="https://img.shields.io/badge/Architecture-Hybrid%20Agentic%20IDE-blue.svg" alt="Hybrid IDE"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Stress--Test-822%20Steps%20%2F%206%20Days-brightgreen.svg" alt="Stress Test 822 Steps"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Stress--Test-2813%20Steps%20%2F%20Deep%20Session-brightgreen.svg" alt="Stress Test 2813 Steps"></a>
   <a href="#"><img src="https://img.shields.io/badge/Arbiter%20Verdict-PASS%20%2F%20APPROVED-success.svg" alt="Arbiter Verdict PASS"></a>
   <a href="#"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-93.3%25%20(Tier%204%20Certified)-blueviolet.svg" alt="Maturity 93.3%"></a>
 </p>
@@ -57,7 +57,7 @@
 
 ## 3. 📂 Склад модуля PoC
 
-Матеріали валідації розділено на два ключові документи:
+Матеріали валідації розділено на ключові аналітичні документи:
 
 1. **[Емпіричний кейс-стаді: 822-кроковий стрес-тест (`case_study_822_step_stress_test.md`)](./case_study_822_step_stress_test.md)**  
    Аналіз реальної сесії `c80fdbd3-7f36-4550-960c-6ce51de1741d`, яка тривала **6 діб безперервно**, згенерувала **2.38 МБ логів** і зберегла 100% цілісності доктринальних даних UWE, CSIS та коду без жодного OOM чи збою ОС.
@@ -65,3 +65,5 @@
    Аналіз рекордної сесії `ee6e8ead-ba3b-4489-814f-d04ffdd435d6`: **1225 кроків, 12.82 доби роботи, 15.26 МБ журналу, 236 компакцій**, 0 деструктивних відкатів Git та 0 апаратних OOM завдяки екстерналізації контексту.
 3. **[Офіційний звіт релізного арбітражу Tier 4 Claude Sonnet 5.5 (`tier4_architectural_audit_report.md`)](./tier4_architectural_audit_report.md)**  
    Незалежна сертифікація архітектури релізним Code-Арбітром за стандартом SEI/TOGAF: вердикт **PASS / APPROVED**, оцінка зрілості **93.3%** (Principal Systems Architect Benchmark).
+4. **[Емпіричний кейс-стаді: Колапс уваги на 2813 кроках та відновлення через Довірений Анклав (`case_study_v0911_context_collapse_and_enclave_recovery.md`)](./case_study_v0911_context_collapse_and_enclave_recovery.md)**  
+   Аналіз інциденту розмивання уваги (*Attention Dilution / Context Collapse* на 2813 кроках та >1.29M токенів): фіксація моменту збою («коли поплавило»), порушення негативних обмежень, спрацювання ручного вимикача архітектора (Circuit Breaker) та математично детерміністичний протокол відновлення цілісності коду через Довірений Анклав (Zero-SHA Antigravity Separation, commit `799faac`).
