@@ -1,4 +1,4 @@
-# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.11)
+# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.12)
 
 Доповнює глобальне ядро Hybrid-IDE (`~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md`). Загальні 5 фаз та OS Hard Gates діють автоматично.
 
@@ -10,16 +10,17 @@
   * `core/enclave/ENCLAVE_INTERFACE.md` — інструментальний контракт Анклаву для Antigravity.
   * `core/engine/diagnostic_runner.py` — діагностичний інференс ШІ: Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet (`--sonnet-query`, `--sonnet-audit`, `--sonnet-precheck`), Tier 4.5 Copilot CLI, Semantic Constraint Checker & Pre-Audit Gate, in-process паспортний емітент та 8-token shingle overlap checker.
   * `core/hooks/pre_invocation_hook.py` (.sh) — PreInvocation Lifecycle Hook: авто-старт нових чатів (`invocationNum == 1`), ініціалізація Brain-First телеметрії та ін'єкція ephemeral-настанов регламенту.
-  * `core/hooks/pre_tool_hook.py` — OS Hard Gates: Zero Inline-Eval, Ledger Immutability Gate, Secret Isolation Gate, Deny-by-reference Shell State Isolation, Cryptographic Hash Passport Integrity Gate, In-Memory Replacement Simulation (`simulate_replacement`), Contributor Mode (`approved_plan.sha256`) та Dynamic Plan-Aware Step Budget.
+  * `core/hooks/pre_tool_hook.py` — OS Hard Gates: Zero Inline-Eval, Ledger Immutability Gate, Secret Isolation Gate, Deny-by-reference Shell State Isolation, Cryptographic Hash Passport Integrity Gate, In-Memory Replacement Simulation (`simulate_replacement`), Contributor Mode (`approved_plan.sha256`), Session-isolated Step Budget та Diagnostic Immunity (Kernel v0.9.12).
   * `core/hooks/post_tool_hook.py` — Circuit Breaker (C4) та підтвердження криптографічних паспортів (`apply_passport` -> `APPLIED`).
   * `core/provenance/phase4_provenance.py` — Brain-First SLSA-реєстр цілісності коду (`<brain>/.system_generated/`), криптографічні HMAC-SHA256 паспорти Schema 1.2 (`MINTED -> RESERVED -> APPLIED / FAILED`), Master HMAC Secret (`~/.gemini/antigravity/.core_master_hmac.secret` mode 0600), атомарні блокування через `locked_ledger()` з `fsync`, єдиний авторизатор `plan_authorizes()`, `--verify-chain` аудит та валідація атрибуцій `[audited: copilot-cli]`, `[verified: claude]`.
-  * `core/verify/test_provenance_security.py` — 30 детерміністичних unit-тестів безпеки провененсу, симулятора, міграційного цензора, Ledger Immutability Gate, конкурентності, ізоляції сесій та HMAC-підписів.
+  * `core/verify/test_provenance_security.py` — 40 детерміністичних unit-тестів безпеки провененсу, симулятора, міграційного цензора, Ledger Immutability Gate, конкурентності, ізоляції сесій та HMAC-підписів.
   * `core/router/phase2_router.py` — маршрутизація моделей (Throughput Model) та бюджет токенів.
   * `core/inspect/phase1_inspect.py` — 2D-телеметрія контексту та AST-інспектор.
-  * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + 30 unit-тестів провененсу + політика 37/37).
+  * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + 40 unit-тестів провененсу + 10 unit-тестів аудитора чату + політика 37/37).
+  * `core/verify/chat_context_auditor.py` — форензік-аудитор чату (Kernel v0.9.12) та Git State Seal Gate.
   * `core/verify/verify_remote_ci.py` — опитування GitHub Actions CI.
 
-## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.11)
+## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.12)
 1. **Фаза 1: Діагностика (Двоканальна)** — лише читання (Канал A: `git status -sb`, `git ls-files`, `view_file`, `enclave_daemon.py --telemetry`; Канал B: `search_web`, `read_url_content` після Absence Verification). Авто-ініціалізація 2D-телеметрії.
 2. **Фаза 2: Репорт та план** — формування `implementation_plan.md` з обов'язковим віджетом індикатора контексту (`[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`) та AI Routing Matrix.
 3. **Фаза 2.5: Pre-Approval Gate (Tier 4 Claude Sonnet)** — аудит плану через Анклав (`enclave_daemon.py --query <plan> --tier 4 --mode audit` або Antigravity Pool Attestation Gate `POST /attest`).

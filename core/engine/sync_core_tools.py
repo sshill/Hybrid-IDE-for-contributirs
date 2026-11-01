@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Скрипт синхронізації утиліт, хуків та навичок ядра Hybrid-IDE (Kernel v0.9.11).
+Скрипт синхронізації утиліт, хуків та навичок ядра Hybrid-IDE (Kernel v0.9.12).
 Синхронізує бінарні модулі з core/ до глобального плагіна (~/.gemini/config/plugins/hybrid-ide/bin)
 та локальних хабів (.agents/scripts, Antigravity_Mgr/tools),
 а також системні навички до ~/.gemini/config/skills/ з автоматичним бекапом.
@@ -19,7 +19,8 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 CORE_FILES = [
-    # Core Engine & Tools
+    # Core Engine & Enclave
+    REPO_ROOT / "core" / "enclave" / "enclave_daemon.py",
     REPO_ROOT / "core" / "engine" / "diagnostic_runner.py",
     REPO_ROOT / "core" / "engine" / "validate_migration_content.py",
     REPO_ROOT / "core" / "inspect" / "phase1_inspect.py",
@@ -62,7 +63,7 @@ def file_sha256(p: Path) -> str:
 
 
 def sync(dry_run: bool = False):
-    print(f"🔄 Початок синхронізації інструментів ядра Hybrid-IDE Kernel v0.9.10{' (DRY-RUN)' if dry_run else ''}...")
+    print(f"🔄 Початок синхронізації інструментів ядра Hybrid-IDE Kernel v0.9.12{' (DRY-RUN)' if dry_run else ''}...")
     synced_count = 0
 
     # 1. Синхронізація Core Files у bin-каталоги

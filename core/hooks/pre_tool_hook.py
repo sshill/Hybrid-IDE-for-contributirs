@@ -178,24 +178,24 @@ def main():
     brain_copilot_auth_flag = os.path.join(brain_state_dir, "copilot_authorized.flag") if brain_state_dir else None
     brain_ledger = os.path.join(brain_state_dir, "provenance_ledger.json") if brain_state_dir else None
 
-    # Fallback /tmp шляхи
+    # Fallback /tmp шляхи з ізоляцією за сесією (Kernel v0.9.12)
     phase4_flag = f"/tmp/antigravity_phase4_{sess_id}.flag"
-    legacy_phase4_flag = "/tmp/antigravity_phase4_active.flag"
+    legacy_phase4_flag = None
     contract_file = f"/tmp/antigravity_phase4_contract_{sess_id}.json"
-    legacy_contract_file = "/tmp/antigravity_phase4_contract.json"
+    legacy_contract_file = None
     history_file = f"/tmp/antigravity_action_history_{sess_id}.json"
     step_file = f"/tmp/antigravity_phase4_steps_{sess_id}.txt"
-    legacy_step_file = "/tmp/antigravity_phase4_steps.txt"
+    legacy_step_file = None
     telemetry_flag = f"/tmp/antigravity_telemetry_{sess_id}.flag"
-    legacy_telemetry_flag = "/tmp/antigravity_telemetry_inspected.flag"
+    legacy_telemetry_flag = None
 
-    all_telemetry_flags = [f for f in (brain_telemetry_flag, telemetry_flag, legacy_telemetry_flag) if f]
-    all_phase4_flags = [f for f in (brain_phase4_flag, phase4_flag, legacy_phase4_flag) if f]
-    all_contract_files = [f for f in (brain_contract_file, contract_file, legacy_contract_file) if f]
-    all_history_files = [f for f in (brain_history_file, history_file, "/tmp/antigravity_action_history.json") if f]
-    all_step_files = [f for f in (brain_step_file, step_file, legacy_step_file) if f]
+    all_telemetry_flags = [f for f in (brain_telemetry_flag, telemetry_flag) if f]
+    all_phase4_flags = [f for f in (brain_phase4_flag, phase4_flag) if f]
+    all_contract_files = [f for f in (brain_contract_file, contract_file) if f]
+    all_history_files = [f for f in (brain_history_file, history_file) if f]
+    all_step_files = [f for f in (brain_step_file, step_file) if f]
     all_claude_flags = [f for f in (brain_claude_flag, "/tmp/antigravity_claude_verified.flag") if f]
-    all_copilot_flags = [f for f in (brain_copilot_flag, brain_copilot_auth_flag, "/tmp/antigravity_copilot_executed.flag", "/tmp/antigravity_copilot_authorized.flag") if f]
+    all_copilot_flags = [f for f in (brain_copilot_flag, brain_copilot_auth_flag, f"/tmp/antigravity_copilot_executed_{sess_id}.flag") if f]
 
     # ============================================================
     # 0. HARD DENY GATE: Залізний бар'єр заборонених деструктивних команд
@@ -637,7 +637,21 @@ def main():
                     print(json.dumps(res))
                     return
 
-    # В. Динамічний ліміт кроків Фази 4 (Dynamic Step Budget)
+    # В. Динамічний ліміт кроків Фази 4 (Dynamic Step Budget v0.9.12)
+    # Життєвий цикл Фази 5.2 Auto-Reset: якщо в сесії вже є walkthrough.md або запечатаний коміт
+    has_walkthrough = False
+    if brain_state_dir:
+        b_parent = os.path.dirname(brain_state_dir)
+        if os.path.isfile(os.path.join(b_parent, "walkthrough.md")):
+            has_walkthrough = True
+    if has_walkthrough:
+        for f_clean in (all_phase4_flags + all_step_files):
+            if os.path.exists(f_clean):
+                try:
+                    os.remove(f_clean)
+                except Exception:
+                    pass
+
     is_phase4_active = any(os.path.exists(pf) for pf in all_phase4_flags)
     if is_phase4_active:
         # Автоматичне скидання прапорців Фази 4 при створенні коміту
@@ -664,9 +678,19 @@ def main():
         is_diag_cmd = False
         if name == "run_command":
             cmd = args.get("CommandLine", "").strip()
-            if any(cmd.startswith(p) for p in ("git status", "git diff", "git log", "git show", "sha256sum", "python3 -m py_compile", "readlink", "diff", "find")):
+            diag_prefixes = (
+                "git status", "git diff", "git log", "git show", "sha256sum",
+                "python3 -m py_compile", "readlink", "diff", "find",
+                "python3 core/verify/chat_context_auditor.py",
+                "python3 core/enclave/enclave_daemon.py",
+                "python3 core/inspect/phase1_inspect.py",
+                "python3 core/verify/phase5_verify.py"
+            )
+            if any(cmd.startswith(p) or f"/{p}" in cmd for p in diag_prefixes):
                 is_diag_cmd = True
         is_read_only = (name in ("view_file", "list_dir", "grep_search", "find_by_name")) or is_diag_cmd
+
+        # Kernel v0.9.12: Read-only та діагностичні команди мають безумовний імунітет
         if not is_read_only:
             step_count += 1
             for sf in all_step_files:
@@ -676,18 +700,19 @@ def main():
                 except Exception:
                     pass
 
-        if step_count > dynamic_budget:
-            log(f"HARD DENY: Phase 4 dynamic step budget exceeded (steps={step_count} > {dynamic_budget})")
-            res = {
-                "decision": "deny",
-                "reason": (
-                    f"HARD GATE VIOLATION (Dynamic Plan-Aware Metric & Semantic Loop Gate v0.9.4):\n"
-                    f"Перевищено динамічний бюджет дій Фази 4 ({step_count} > {dynamic_budget} дій для плану).\n"
-                    "Необхідно зупинити ReAct-ланцюг та опублікувати проміжний звіт у чат."
-                )
-            }
-            print(json.dumps(res))
-            return
+            if step_count > dynamic_budget:
+                log(f"Phase 4 dynamic step budget pause (steps={step_count} > {dynamic_budget})")
+                res = {
+                    "decision": "ask",
+                    "reason": (
+                        f"DYNAMIC 2D-TELEMETRY & STEP BUDGET PAUSE (Kernel v0.9.12):\n"
+                        f"Досягнуто планового порогу дій Фази 4 ({step_count} > {dynamic_budget} дій для поточного плану).\n"
+                        "Зупинка ReAct-ланцюга для звіту про статус об'єктів. "
+                        "Надішліть '+' для подовження бюджету (+30 дій) або використайте /bridge."
+                    )
+                }
+                print(json.dumps(res))
+                return
 
     needs_prompt = False
 

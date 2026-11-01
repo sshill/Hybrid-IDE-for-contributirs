@@ -2,16 +2,16 @@
 name: reglament
 description: >-
   Audits the current session for strict compliance with Hybrid IDE General
-  Execution Policy (Kernel v0.9.11), performs the mandatory Trusted Enclave
+  Execution Policy (Kernel v0.9.12), performs the mandatory Trusted Enclave
   Battle Test (Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet, Tier 4.5 Copilot CLI),
   verifies Global Plugin rules, Tool Catalog, and domain overlay AGENTS.md policies,
   and outputs the structured Plugin & Overlay Integration Log.
   Triggered by /reglament [version] or /reglamet [version].
 ---
 
-# 🛡️ Регламентний аудит та перевірка ШІ-матриці (/reglament, /reglamet) (Kernel v0.9.11)
+# 🛡️ Регламентний аудит та перевірка ШІ-матриці (/reglament, /reglamet) (Kernel v0.9.12)
 
-Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet` (з опціональним аргументом версії, наприклад `/reglament v0.9.11`), просить «перевірити регламент», «налаштувати чат на регламент» або провести повну діагностику готовності сесії до розробки.
+Використовуйте цю навичку щоразу, коли користувач вводить `/reglament` або `/reglamet` (з опціональним аргументом версії, наприклад `/reglament v0.9.12`), просить «перевірити регламент», «налаштувати чат на регламент» або провести повну діагностику готовності сесії до розробки.
 
 ---
 
@@ -43,9 +43,9 @@ description: >-
 2. Вивести обов'язковий публічний статус разом із віджетом `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`:
    - **Зафіксований домен:** `<Поточний домен робочого простору>`
    - **Індикатор контексту:** `<Реальна зона (🟢/🟡/🔴) за кроками S та токенами Nin/Nout>`
-   - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Protocol v0.9.11)`
+   - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Protocol v0.9.12)`
    - **Статус Batch Access:** `Авторизовано регламентом`
-   - **Цільова версія:** `v0.9.11` (Trusted Enclave Architecture, Multi-Tier AI Gateway, Schema 1.2 HMAC Passports)
+   - **Цільова версія:** `v0.9.12` (Trusted Enclave Architecture, Multi-Tier AI Gateway, 2D-Telemetry, Phase 5.2 Git State Seal Gate)
 
 ### 🛑 Крок 2: Бойовий 4-Tier аудит ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):
@@ -63,18 +63,18 @@ description: >-
 ======================================================================
 [Step 1: Global Plugin Discovery]
   - Шлях плагіна:   ~/.gemini/config/plugins/hybrid-ide/
-  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.11)
-  - Хуки безпеки:   hooks.json (PreToolUse OS Gates, PostToolUse Breaker, Stop)
+  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.12)
+  - Хуки безпеки:   hooks.json (PreToolUse OS Gates v0.9.12, PostToolUse Breaker, Stop)
   - Статус хуків:   🟢 Активно (єдиний глобальний обробник)
 
 [Step 2: Constitutional Kernel Audit]
-  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.11)
+  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.12)
   - OS Hard Gates:  Zero Inline-Eval, Shell State Isolation, Cryptographic Hash Passports, In-Memory Simulation
   - Дисципліна:     5 обов'язкових фаз, Anchored Grounding Gate, Anti-Echo Protocol
 
 [Step 3: Domain Overlay Resolution & Core Policies]
   - Файл оверлею:   <workspace_root>/AGENTS.md
-  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 37/37)
+  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 10 auditor + 37/37)
   - Двогейтовий суверенітет: '+' для локальних змін/коміту; '++' для релізу/пушу
   - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
 
@@ -91,7 +91,7 @@ description: >-
     * LinkedIn Developer API: OAuth 2.0 у ~/.env (LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI)
     * Email & SMTP нотифікації: системні сповіщення та релізи
     * Контрактний довідник: core/enclave/ENCLAVE_INTERFACE.md (читання через view_file)
-    * Верифікатор: core/verify/phase5_verify.py (40 unit + 37/37 перевірок)
+    * Верифікатор: core/verify/phase5_verify.py (40 unit + 10 auditor + 37/37 перевірок)
 
 [Step 3.2: Anchored Instrumental Requests Protocol]
   - Обов'язкова звірка з ENCLAVE_INTERFACE.md або --help-tools перед запитом

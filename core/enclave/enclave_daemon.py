@@ -59,6 +59,7 @@ def _resolve_core_imports():
             mint_passport, reserve_passport, apply_passport,
             simulate_replacement, get_file_sha256, get_content_sha256,
             locked_ledger, load_ledger, compute_passport_hmac, verify_passport_hmac,
+            verify_chain,
             GENERATIVE_MODELS_ALLOWLIST
         )
         prov_fns = {
@@ -72,6 +73,7 @@ def _resolve_core_imports():
             "load_ledger": load_ledger,
             "compute_passport_hmac": compute_passport_hmac,
             "verify_passport_hmac": verify_passport_hmac,
+            "verify_chain": verify_chain,
             "allowlist": GENERATIVE_MODELS_ALLOWLIST
         }
     except ModuleNotFoundError:
@@ -80,6 +82,7 @@ def _resolve_core_imports():
                 mint_passport, reserve_passport, apply_passport,
                 simulate_replacement, get_file_sha256, get_content_sha256,
                 locked_ledger, load_ledger, compute_passport_hmac, verify_passport_hmac,
+                verify_chain,
                 GENERATIVE_MODELS_ALLOWLIST
             )
             prov_fns = {
@@ -93,6 +96,7 @@ def _resolve_core_imports():
                 "load_ledger": load_ledger,
                 "compute_passport_hmac": compute_passport_hmac,
                 "verify_passport_hmac": verify_passport_hmac,
+                "verify_chain": verify_chain,
                 "allowlist": GENERATIVE_MODELS_ALLOWLIST
             }
         except ModuleNotFoundError:
@@ -223,7 +227,7 @@ def direct_query_groq(prompt: str, model: str = "openai/gpt-oss-120b", max_token
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
-                "User-Agent": "HybridIDE-Enclave/0.9.11"
+                "User-Agent": "HybridIDE-Enclave/0.9.12"
             }
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -792,11 +796,31 @@ def attest_arbiter(verdict: str = "PASS", arbiter: str = "Antigravity Pool (Clau
     }
 
 
+def enclave_verify_chain() -> dict:
+    """Детерміністична верифікація ланцюга HMAC-паспортів через core.provenance."""
+    prov_fns, _ = _resolve_core_imports()
+    vc_fn = prov_fns.get("verify_chain")
+    if not vc_fn:
+        return {"status": "UNKNOWN", "error": "verify_chain not found in provenance module"}
+    try:
+        res = vc_fn()
+        if isinstance(res, tuple):
+            ok, msg, details = res
+            return {
+                "status": "VALID" if ok else "INVALID",
+                "message": msg,
+                "details": details
+            }
+        return res if isinstance(res, dict) else {"status": "VALID", "result": res}
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
+
+
 def get_tools_help() -> dict:
     """Інструментальний контракт та схема Довіреного Анклаву для Antigravity (Zero-Dep stdlib)."""
     return {
         "framework": "Hybrid IDE Trusted Enclave",
-        "version": "0.9.11",
+        "version": "0.9.12",
         "endpoints": {
             "POST /apply": {
                 "description": "Атомарний запис/модифікація файлу з первинним контролем (Anti-Echo, AST, HMAC-паспорт).",
@@ -837,7 +861,7 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             resp = {
                 "status": "READY",
-                "version": "0.9.11",
+                "version": "0.9.12",
                 "enclave": "Trusted Sidecar",
                 "tiers": [1, 2, 4, 4.5],
                 "time": time.time()
@@ -849,13 +873,11 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
         elif self.path == "/telemetry":
             resp = get_telemetry()
         elif self.path in ("/verify-chain", "/verify_chain"):
-            prov_fns, _ = _resolve_core_imports()
-            vc_fn = prov_fns.get("verify_chain")
-            resp = vc_fn() if vc_fn else {"status": "UNKNOWN", "error": "verify_chain not found"}
+            resp = enclave_verify_chain()
         elif self.path in ("/diagnostics", "/check-all"):
             resp = {
                 "status": "READY",
-                "version": "0.9.11",
+                "version": "0.9.12",
                 "telemetry": get_telemetry(),
                 "battle_test": run_battle_test()
             }
@@ -976,7 +998,7 @@ def call_daemon_apply(payload: dict, host: str = DEFAULT_ENCLAVE_HOST, port: int
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Hybrid IDE Enclave Architecture Daemon & Client (v0.9.11)")
+    parser = argparse.ArgumentParser(description="Hybrid IDE Enclave Architecture Daemon & Client (v0.9.12)")
     parser.add_argument("--daemon", action="store_true", help="Запустити демон анклаву на loopback 127.0.0.1")
     parser.add_argument("--host", type=str, default=DEFAULT_ENCLAVE_HOST, help="Хост (за замовчуванням 127.0.0.1)")
     parser.add_argument("--port", type=int, default=DEFAULT_ENCLAVE_PORT, help="Порт (за замовчуванням 8765)")
@@ -1039,7 +1061,7 @@ def main():
     if args.check_all:
         diag = {
             "status": "READY",
-            "version": "0.9.11",
+            "version": "0.9.12",
             "telemetry": get_telemetry(),
             "battle_test": run_battle_test()
         }
@@ -1052,10 +1074,8 @@ def main():
         return 0
 
     if args.verify_chain:
-        prov_fns, _ = _resolve_core_imports()
-        vc_fn = prov_fns.get("verify_chain")
-        res_vc = vc_fn() if vc_fn else {"status": "UNKNOWN", "error": "verify_chain not found"}
-        print(json.dumps(res_vc, indent=2))
+        res_vc = enclave_verify_chain()
+        print(json.dumps(res_vc, indent=2, ensure_ascii=False))
         return 0 if (isinstance(res_vc, dict) and res_vc.get("status") in ("VALID", "EMPTY", "PASS")) else 1
 
     if args.target:
