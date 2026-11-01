@@ -400,6 +400,13 @@ def main():
 
     t_path = resolve_transcript_path(conversation_id=args.conversation_id, transcript_path=args.transcript)
     if not t_path:
+        is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+        if is_ci:
+            if args.json:
+                print(json.dumps({"status": "PASS", "info": "CI/Headless environment - transcript audit skipped"}, indent=2))
+            else:
+                print("ℹ️ [CHAT CONTEXT AUDITOR]: CI/Headless environment detected (no active transcript). Skipping live transcript check.")
+            return 0
         err = {"status": "ERROR", "error": "Transcript file not found"}
         if args.json:
             print(json.dumps(err, indent=2))

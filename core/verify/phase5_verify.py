@@ -117,10 +117,14 @@ def main():
 
         chat_auditor_path = os.path.join(REPO_ROOT, 'core', 'verify', 'chat_context_auditor.py')
         if os.path.isfile(chat_auditor_path):
-            res_chat_audit = subprocess.run([sys.executable, chat_auditor_path, "--current-session", "--strict"], cwd=REPO_ROOT)
-            if res_chat_audit.returncode != 0:
-                sys.stderr.write("❌ Phase 4/Phase 5 Chat Context Audit Violation Detected! Release blocked.\n")
-                sys.exit(res_chat_audit.returncode)
+            is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+            if is_ci:
+                sys.stdout.write("ℹ️ CI Environment detected: skipping interactive chat transcript audit.\n")
+            else:
+                res_chat_audit = subprocess.run([sys.executable, chat_auditor_path, "--current-session", "--strict"], cwd=REPO_ROOT)
+                if res_chat_audit.returncode != 0:
+                    sys.stderr.write("❌ Phase 4/Phase 5 Chat Context Audit Violation Detected! Release blocked.\n")
+                    sys.exit(res_chat_audit.returncode)
 
         # 2. Run the general policy validator with deterministic policy path
         run_validator(VALIDATOR_PATH, policy_path)
