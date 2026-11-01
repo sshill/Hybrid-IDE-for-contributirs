@@ -458,7 +458,7 @@ class TestProvenanceSecurity(unittest.TestCase):
         # Тест генератора мосту
         ok_bridge, prompt = generate_canonical_bridge_prompt(self.test_dir, conv_id="test_conv_123")
         self.assertTrue(ok_bridge)
-        self.assertTrue("v0.9.10" in prompt or "v0.9.11" in prompt)
+        self.assertTrue("v0.9.10" in prompt or "v0.9.11" in prompt or "v0.9.12" in prompt)
         self.assertIn("test_conv_123", prompt)
 
     def test_ledger_immutability_blocks_tool_writes(self):
@@ -868,7 +868,7 @@ class TestProvenanceSecurity(unittest.TestCase):
     def test_enclave_tools_help_schema(self):
         """39. Анклав: ендпоінт /help-tools повертає вичерпну схему інструментів для Antigravity."""
         schema = get_tools_help()
-        self.assertEqual(schema.get("version"), "0.9.11")
+        self.assertIn(schema.get("version"), ("0.9.11", "0.9.12"))
         self.assertIn("endpoints", schema)
         endpoints = schema.get("endpoints")
         self.assertIn("POST /apply", endpoints)
