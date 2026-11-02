@@ -34,7 +34,7 @@
 11. **Фаза 5.2: Git State Seal Gate** — після успішних тестів оркестратор ЗОБОВ'ЯЗАНИЙ АВТОНОМНО виконати `git add <файли>` та `git commit -m "<type>(<scope>): <опис> [verified: antigravity]"`, отримати Commit SHA та внести його у фінальний `walkthrough.md`. Санкція `+` покриває виконання Фази 4 та локальний коміт Фази 5; санкція `++` потрібна виключно для віддаленого пушу (`push_to_github.sh` / `git push`). Заборонено залишати репозиторій у незапечатаному стані.
 
 ## 3. Каталог інструментів Довіреного Анклаву та супутніх інтерфейсів (Tool Catalog)
-- **Головні інструменти Анклаву (`core/enclave/enclave_daemon.py`):**
+- **Головні інструменти Анклаву (`~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py`, локально `core/enclave/enclave_daemon.py`):**
   * `POST /apply` (`--target <файл> --task <ТЗ> | --direct-code <код>`) — атомарний синтез/патч із первинним контролем.
   * `POST /query` (`--query <промпт>`) — суверенний ШІ-шлюз із підтримкою FrugalGPT та Failover.
   * `GET /battle-test` (`--battle-test`) — пакетний тест 4 рівнів ШІ (Ollama, Groq, Claude, Copilot probe).
@@ -45,8 +45,8 @@
 - **Супутні та інтеграційні інтерфейси:**
   * **LinkedIn Developer API:** OAuth 2.0 у `~/.env` (`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI`) для інтеграцій.
   * **Email & SMTP нотифікації:** модулі відправлення системних сповіщень та звітів.
-  * **Контрактний довідник:** [`core/enclave/ENCLAVE_INTERFACE.md`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/enclave/ENCLAVE_INTERFACE.md) (читається через `view_file` без виклику шеллу).
-  * **Верифікаційні інструменти:** [`core/verify/phase5_verify.py`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/verify/phase5_verify.py) (40 unit-тестів + 37/37 перевірок політики).
+  * **Контрактний довідник:** [`~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md`](file:///home/hills/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md) (локально [`core/enclave/ENCLAVE_INTERFACE.md`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/enclave/ENCLAVE_INTERFACE.md), читання через `view_file`).
+  * **Верифікаційні інструменти:** [`~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py`](file:///home/hills/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py) (локально `core/verify/phase5_verify.py`, 40 unit-тестів + 10 auditor + 37/37 перевірок політики).
 - **Регламент інструментальних запитів до Анклаву (Anchored Instrumental Requests):**
   * Оркестратору заборонено надсилати неструктуровані чи сліпі промпти («зроби щось», «напиши код»).
   * Перед кожним викликом оркестратор зобов'язаний звіритися з інтерфейсом `core/enclave/ENCLAVE_INTERFACE.md` або викликом `enclave_daemon.py --help-tools`.
@@ -59,7 +59,7 @@
 - **Brain-First Storage:** Усі сесійні файли (кроки, контракти, історія, прапорці, леджер, паспорти) зберігаються у `<artifactDirectoryPath>/.system_generated/`, що гарантує захист від видалення при перезавантаженні ОС.
 
 ## 5. Верифікація, запечатування та реліз (Фаза 5)
-- **Mandatory Proactive Telemetry Gate (Zero-Omission):** заборонено надсилати фазові звіти Фази 1 (стартовий банер), Фази 2/3 (запит на схвалення) та Фази 5 (фінальний звіт і `walkthrough.md`) без свіжого виміряного віджета 2D-телеметрії у блоці коду `text` (отриманого через `python3 core/inspect/phase1_inspect.py --telemetry` або `core/enclave/enclave_daemon.py --telemetry`).
+- **Mandatory Proactive Telemetry Gate (Zero-Omission):** заборонено надсилати фазові звіти Фази 1 (стартовий банер), Фази 2/3 (запит на схвалення) та Фази 5 (фінальний звіт і `walkthrough.md`) без свіжого виміряного віджета 2D-телеметрії у блоці коду `text` (отриманого через `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry` або `core/inspect/phase1_inspect.py --telemetry`).
 - **Локальна верифікація:** `python3 core/verify/phase5_verify.py` (40 unit-тестів + 37/37 перевірок + тести аудитора).
 - **Синтаксис:** `python3 -m py_compile <шлях_до_файлу.py>`.
 - **Аудит контексту чату:** `python3 core/verify/chat_context_auditor.py --current-session --strict`.

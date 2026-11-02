@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CORE_FILES = [
     # Core Engine & Enclave
     REPO_ROOT / "core" / "enclave" / "enclave_daemon.py",
+    REPO_ROOT / "core" / "enclave" / "ENCLAVE_INTERFACE.md",
     REPO_ROOT / "core" / "engine" / "diagnostic_runner.py",
     REPO_ROOT / "core" / "engine" / "validate_migration_content.py",
     REPO_ROOT / "core" / "inspect" / "phase1_inspect.py",
@@ -42,6 +43,7 @@ CORE_FILES = [
 
 TARGET_DIRS = [
     Path.home() / ".gemini" / "config" / "plugins" / "hybrid-ide" / "bin",
+    Path.home() / ".gemini" / "antigravity" / "bin",
     Path.home() / "Documents" / ".agents" / "scripts",
     Path.home() / "Documents" / "Antigravity_Mgr" / "tools",
 ]
@@ -85,8 +87,9 @@ def sync(dry_run: bool = False):
 
             if not dry_run:
                 shutil.copy2(src, dst)
-                current_perms = os.stat(dst).st_mode
-                os.chmod(dst, current_perms | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                if src.suffix in (".py", ".sh", ".bash"):
+                    current_perms = os.stat(dst).st_mode
+                    os.chmod(dst, current_perms | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             print(f"  ✅ Синхронізовано: {src.name}")
             synced_count += 1
 

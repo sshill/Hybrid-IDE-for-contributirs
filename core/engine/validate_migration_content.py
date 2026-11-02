@@ -254,15 +254,15 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
 ## 2. Імперативний стартовий протокол (Strict Step-by-Step Gate)
 
 ### 🛑 Крок 1: Phase 1 Status Banner та 2D-телеметрія контексту
-Виконати динамічний вимір метрик (`core/enclave/enclave_daemon.py --telemetry` або `core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
+Виконати динамічний вимір метрик (`python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry` або `python3 core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
 `🎯 [DOMAIN: {domain_name} | HOST: Linux/Debian]`
 `<Індикатор 🟢/🟡/🔴> [CONTEXT: <S> кроків (~<tok>k tok) | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
-*(Обов'язково вивести віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у чат!)*
+*(Обов'язково вивести віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`!)*
 
 ### 🛑 Крок 2: Бойова перевірка ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):
-`python3 core/enclave/enclave_daemon.py --battle-test`
-*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe)*
+`python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test`
+*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe. У корені репозиторію також доступно: `python3 core/enclave/enclave_daemon.py --battle-test`)*
 
 ### 🛑 Крок 3: Лог інтеграції плагіна та доменного оверлею
 Сформувати та вивести структурований звіт:
@@ -288,7 +288,7 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
   - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
 
 [Step 3.1: Tool Catalog & Satellite Interfaces]
-  - Головні інструменти Анклаву (core/enclave/enclave_daemon.py):
+  - Головні інструменти Анклаву (~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py, локально core/enclave/enclave_daemon.py):
     * POST /apply (--target, --task | --direct-code) — атомарний синтез/патч
     * POST /query (--query) — суверенний мульти-Tier ШІ-шлюз (FrugalGPT & Failover)
     * GET /battle-test (--battle-test) — бойовий 4-Tier тест
@@ -299,8 +299,8 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
   - Супутні та зовнішні інтерфейси:
     * LinkedIn Developer API: OAuth 2.0 у ~/.env (LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI)
     * Email & SMTP нотифікації: системні сповіщення та релізи
-    * Контрактний довідник: core/enclave/ENCLAVE_INTERFACE.md (читання через view_file)
-    * Верифікатор: core/verify/phase5_verify.py (40 unit + 37/37 перевірок)
+    * Контрактний довідник: ~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md (читання через view_file)
+    * Верифікатор: ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (40 unit + 10 auditor + 37/37 перевірок)
 
 [Step 3.2: Anchored Instrumental Requests Protocol]
   - Обов'язкова звірка з ENCLAVE_INTERFACE.md або --help-tools перед запитом

@@ -38,8 +38,8 @@ description: >-
 
 ### 🛑 Крок 1: Phase 1 Status Banner та 2D-телеметрія контексту
 1. Виконати динамічне зняття метрик сесії:
-   `python3 core/enclave/enclave_daemon.py --telemetry`
-   *(Fallback: `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry`)*
+   `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry`
+   *(Локально в репозиторії: `python3 core/inspect/phase1_inspect.py --telemetry` або `python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --telemetry`)*
 2. Вивести обов'язковий публічний статус разом із виміряним віджетом `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`, обов'язково обрамленим у блок коду `text`:
    - **Зафіксований домен:** `<Поточний домен робочого простору>`
    - **Індикатор контексту:** `<Реальна зона (🟢/🟡/🔴) за кроками S та токенами Nin/Nout>`
@@ -50,8 +50,8 @@ description: >-
 
 ### 🛑 Крок 2: Бойовий 4-Tier аудит ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):
-`python3 core/enclave/enclave_daemon.py --battle-test`
-*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe. Fallback: `python3 ~/.gemini/config/plugins/hybrid-ide/bin/diagnostic_runner.py --battle-test`)*
+`python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test`
+*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe. У корені репозиторію також доступно: `python3 core/enclave/enclave_daemon.py --battle-test`)*
 
 *Обов'язково вивести віджети `[AI Invocation Event]` для всіх активних провайдерів у чат!*
 
@@ -80,7 +80,7 @@ description: >-
   - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
 
 [Step 3.1: Tool Catalog & Satellite Interfaces]
-  - Головні інструменти Анклаву (core/enclave/enclave_daemon.py):
+  - Головні інструменти Анклаву (~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py, локально core/enclave/enclave_daemon.py):
     * POST /apply (--target, --task | --direct-code) — атомарний синтез/патч
     * POST /query (--query) — суверенний мульти-Tier ШІ-шлюз (FrugalGPT & Failover)
     * GET /battle-test (--battle-test) — бойовий 4-Tier тест
@@ -91,8 +91,8 @@ description: >-
   - Супутні та зовнішні інтерфейси:
     * LinkedIn Developer API: OAuth 2.0 у ~/.env (LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI)
     * Email & SMTP нотифікації: системні сповіщення та релізи
-    * Контрактний довідник: core/enclave/ENCLAVE_INTERFACE.md (читання через view_file)
-    * Верифікатор: core/verify/phase5_verify.py (40 unit + 10 auditor + 37/37 перевірок)
+    * Контрактний довідник: ~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md (читання через view_file)
+    * Верифікатор: ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (40 unit + 10 auditor + 37/37 перевірок)
 
 [Step 3.2: Anchored Instrumental Requests Protocol]
   - Обов'язкова звірка з ENCLAVE_INTERFACE.md або --help-tools перед запитом
@@ -101,7 +101,7 @@ description: >-
 [Step 4: Decoupling & Binding Verdict]
   - Статус GEMINI:  🚫 Декупловано з підпроєктів (файли GEMINI.md вичищено)
   - Колізії хуків:  🟢 Локальні .agents/hooks.json деактивовано ({})
-  - Валідатор:      40 unit-тестів + 37/37 перевірок пройдено (core/verify/phase5_verify.py)
+  - Валідатор:      40 unit-тестів + 10 auditor + 37/37 перевірок пройдено (~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py)
   - Вердикт:        ✅ Ядро та доменний оверлей успішно зв'язано в активний контекст
 ======================================================================
 ```

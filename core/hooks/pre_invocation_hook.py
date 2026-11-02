@@ -104,7 +104,10 @@ def _build_injection(workspace_paths=None):
             "Для уникнення помилок 'fatal: not a git repository' у Фазі 1 (Діагностика):\n"
             "• Вказуйте параметр Cwd або використовуйте 'git -C <шлях>' до цільового проєкту:\n"
             f"{repos_list}\n"
-            "• Не використовуйте ls/find (заблоковані OS Hard Gate), читайте стан через git.\n\n"
+            "• Не використовуйте ls/find (заблоковані OS Hard Gate), читайте стан через git.\n"
+            "• Інструменти ядра запускайте через глобальний бінарний каталог:\n"
+            "  python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test\n"
+            "  python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry\n\n"
         )
     elif repo_root:
         overlay_file = os.path.join(repo_root, "AGENTS.md")
@@ -119,16 +122,17 @@ def _build_injection(workspace_paths=None):
         "Сесію ініціалізовано. Регламент діє автоматично:\n"
         "• Конституційне ядро: ~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md\n"
         f"• Проєктний оверлей: {overlay_info}\n"
-        "• Фаза 1: Діагностика (лише читання; заборонено ls/find/grep, використовувати git та індекси, enclave_daemon.py --telemetry)\n"
+        "• Бойова перевірка ШІ (Крок 2): python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test\n"
+        "• Фаза 1: Діагностика (лише читання; заборонено ls/find/grep, використовувати git та індекси, python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry)\n"
         "• Фаза 2: Репорт та implementation_plan.md (з віджетом 2D-телеметрії)\n"
-        "• Фаза 2.5: Pre-Approval Gate — аудит плану через Довірений Анклав Tier 4 Claude Sonnet (enclave_daemon.py --query <plan> --tier 4 --mode audit)\n"
+        "• Фаза 2.5: Pre-Approval Gate — аудит плану (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <plan> --tier 4 --mode audit)\n"
         "• Фаза 3: Схвалення користувача (+, +!, ++)\n"
         "• Фаза 4.1: Pre-Execution Context Assembly (Оркестратор Antigravity, view_file, zero-shell)\n"
-        "• Фаза 4.2: Pre-Check Audit Gate через Довірений Анклав Tier 4 Claude Sonnet (enclave_daemon.py --query <context> --tier 4 --mode precheck)\n"
+        "• Фаза 4.2: Pre-Check Audit Gate (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <context> --tier 4 --mode precheck)\n"
         "• Фаза 4.3: Синтез коду Довіреним Анклавом (Tier 1 Ollama / Tier 2 Groq) з HMAC-паспортом Schema 1.2\n"
         "• Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт (AST, py_compile)\n"
-        "• Фаза 4.5: Pre-Release E2E аудит через Copilot CLI / Claude Sonnet (enclave_daemon.py --query <diff> --tier 4.5 --mode audit)\n"
-        "• Фаза 5.1: Dual-Audit Report (enclave_daemon.py --verify-chain) та phase5_verify.py (37/37)\n"
+        "• Фаза 4.5: Pre-Release E2E аудит (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <diff> --tier 4.5 --mode audit)\n"
+        "• Фаза 5.1: Dual-Audit Report (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --verify-chain) та phase5_verify.py (37/37)\n"
         "• Фаза 5.2: Git State Seal Gate — обов'язковий автономний git commit до публікації walkthrough.md\n"
         "Глобальні канонічні інструменти ядра (працюють з будь-якого каталогу):\n"
         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py (Єдиний ШІ-шлюз Довіреного Анклаву: Tier 1/2/4/4.5)\n"
@@ -136,6 +140,7 @@ def _build_injection(workspace_paths=None):
         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/chat_context_auditor.py (--current-session, --strict, форензік-аудит)\n"
         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py (--register, --verify-chain, SLSA)\n"
         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (верифікація 40 unit + 10 auditor + 37/37)\n"
+        "  - ~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md (інструментальний контракт Анклаву)\n"
         "У репозиторії Hybrid-IDE інструменти також доступні локально в core/."
     )
     return {
