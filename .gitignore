@@ -13,6 +13,8 @@ __pycache__/
 
 # Logs and runtime caches
 *.log
+*.flag
+claude_verified.flag
 /tmp/
 antigravity_provenance_ledger.json
 

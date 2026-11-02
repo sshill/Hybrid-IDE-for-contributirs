@@ -76,7 +76,9 @@ def _import_provenance():
 
 def _import_migration_validator():
     """Динамічний імпорт функцій валідації міграції (Dual-Layout)."""
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     engine_dirs = [
+        repo_root,
         os.path.dirname(__file__),
         os.path.expanduser("~/.gemini/config/plugins/hybrid-ide/bin"),
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin")),
@@ -935,7 +937,7 @@ def synthesize_script_file(task_prompt: str, out_path: str, model: str = "qwen2.
 
         session_id = resolve_session_id()
 
-        # Випуск криптографічного паспорта провененсу in-process (Policy v0.9.10)
+        # Випуск криптографічного паспорта провененсу in-process (Policy v0.9.12)
         mint_fn, _ = _import_provenance()
         passport_id = None
         if mint_fn:
@@ -1030,8 +1032,8 @@ def main():
     parser.add_argument("--strict-anchor", action="store_true", help="Блокувати запити без точних якірних специфікацій (Anti-Echo Gate)")
     parser.add_argument("--pre-audit", type=str, help="Детерміністична перевірка синтаксису (AST + py_compile) перед Фазою 2")
 
-    # Мостові промпти та валідація міграції (Kernel v0.9.10)
-    parser.add_argument("--bridge", action="store_true", help="Генерація та валідація канонічного Bridge Prompt (v0.9.10)")
+    # Мостові промпти та валідація міграції (Kernel v0.9.12)
+    parser.add_argument("--bridge", action="store_true", help="Генерація та валідація канонічного Bridge Prompt (Kernel v0.9.12)")
     parser.add_argument("--workspace", type=str, default=None, help="Шлях до робочого простору для мостових промптів та аудиту")
     parser.add_argument("--validate-migration", type=str, help="Валідація файлу або контенту на відсутність інструкцій протидії регламенту")
 
@@ -1051,7 +1053,7 @@ def main():
 
     args = parser.parse_args()
 
-    # 0. Мостові промпти та валідація міграції (Kernel v0.9.10)
+    # 0. Мостові промпти та валідація міграції (Kernel v0.9.12)
     if args.bridge:
         val_text, val_file, gen_bridge = _import_migration_validator()
         if not gen_bridge:

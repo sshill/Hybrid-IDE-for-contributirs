@@ -1005,7 +1005,7 @@ def main():
     parser.add_argument("--target", type=str, help="Цільовий файл для застосування коду")
     parser.add_argument("--task", type=str, help="ТЗ для синтезу коду моделлю ШІ")
     parser.add_argument("--direct-code", type=str, help="Прямий код для валідації та запису (без запиту до ШІ)")
-    parser.add_argument("--mode", type=str, choices=["synthesize", "patch"], default="synthesize", help="Режим: synthesize або patch")
+    parser.add_argument("--mode", type=str, choices=["synthesize", "patch", "audit", "precheck"], default="synthesize", help="Режим: synthesize, patch, audit або precheck")
     parser.add_argument("--tier", type=float, help="Рівень ШІ (1, 2, 4, 4.5)")
     parser.add_argument("--model", type=str, help="Назва моделі ШІ")
     parser.add_argument("--patch-target", type=str, help="Вміст для заміни в файлі (для режиму patch)")
@@ -1027,7 +1027,7 @@ def main():
         return 0
 
     if args.query:
-        res = enclave_query(args.query, tier=args.tier or 1, model=args.model)
+        res = enclave_query(args.query, tier=args.tier or 1, model=args.model, mode=args.mode)
         if args.json_output:
             print(json.dumps(res, indent=2))
         else:

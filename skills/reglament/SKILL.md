@@ -40,12 +40,13 @@ description: >-
 1. Виконати динамічне зняття метрик сесії:
    `python3 core/enclave/enclave_daemon.py --telemetry`
    *(Fallback: `python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry`)*
-2. Вивести обов'язковий публічний статус разом із віджетом `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`:
+2. Вивести обов'язковий публічний статус разом із виміряним віджетом `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]`, обов'язково обрамленим у блок коду `text`:
    - **Зафіксований домен:** `<Поточний домен робочого простору>`
    - **Індикатор контексту:** `<Реальна зона (🟢/🟡/🔴) за кроками S та токенами Nin/Nout>`
    - **Режим пісочниці:** `Bypass Sandbox: true (Host-First Protocol v0.9.12)`
    - **Статус Batch Access:** `Авторизовано регламентом`
    - **Цільова версія:** `v0.9.12` (Trusted Enclave Architecture, Multi-Tier AI Gateway, 2D-Telemetry, Phase 5.2 Git State Seal Gate)
+   *(Заборона пасивності Zero-Omission: виміряний віджет телеметрії у блоці `text` є обов'язковим для звіту на схвалення Фази 3 та фінального звіту Фази 5).*
 
 ### 🛑 Крок 2: Бойовий 4-Tier аудит ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):

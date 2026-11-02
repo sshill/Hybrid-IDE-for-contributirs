@@ -60,7 +60,7 @@ def _import_provenance_hooks():
 
 def verify_contributor_plan_sanction(brain_state_dir: str, abs_target: str, base_name: str) -> bool:
     """
-    Перевірка санкції Contributor Mode для ядра (Kernel v0.9.11).
+    Перевірка санкції Contributor Mode для ядра (Kernel v0.9.12).
     Використовує єдиний канонічний авторизатор plan_authorizes() із phase4_provenance.
     """
     if brain_state_dir and os.path.isdir(brain_state_dir):
@@ -385,7 +385,7 @@ def main():
                 return
 
         # ============================================================
-        # SHELL STATE ISOLATION & SECRET ISOLATION GATE (Kernel v0.9.11):
+        # SHELL STATE ISOLATION & SECRET ISOLATION GATE (Kernel v0.9.12):
         # Повна заборона маніпуляцій та перегляду системних файлів і секретів через шелл (deny-by-reference)
         # ============================================================
         norm_cmd = cmd_line.replace("\\", "/").lower()
@@ -402,7 +402,7 @@ def main():
                 res = {
                     "decision": "deny",
                     "reason": (
-                        "HARD GATE VIOLATION (Secret Isolation Gate v0.9.11):\n"
+                        "HARD GATE VIOLATION (Secret Isolation Gate v0.9.12):\n"
                         f"Команда '{cmd_line}' заблокована! Доступ до криптографічних секретів ядра через шелл категорично заборонено."
                     )
                 }
@@ -419,7 +419,7 @@ def main():
                 res = {
                     "decision": "deny",
                     "reason": (
-                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.11):\n"
+                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.12):\n"
                         f"Шелл-маніпуляція захищеними файлами ('{cmd_line}') заблокована!\n"
                         "Зміна стану сесії, леджера провененсу та секретів через шелл категорично заборонена."
                     )
@@ -445,7 +445,7 @@ def main():
                 res = {
                     "decision": "deny",
                     "reason": (
-                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.11):\n"
+                        "HARD GATE VIOLATION (Shell State Isolation Gate v0.9.12):\n"
                         f"Спроба запису/перенаправлення виводу шеллу у захищені системні файли ('{clean_target}') заборонена!\n"
                         "Зміна стану сесії, леджера провененсу та вихідного коду фреймворку через шелл категорично заблокована. "
                         "Всі мутації коду повинні здійснюватися виключно через штатні інструменти IDE з валідацією криптографічних паспортів."
@@ -481,7 +481,7 @@ def main():
             res = {
                 "decision": "deny",
                 "reason": (
-                    "HARD GATE VIOLATION (Secret Isolation Gate v0.9.11):\n"
+                    "HARD GATE VIOLATION (Secret Isolation Gate v0.9.12):\n"
                     f"Прямий перегляд файлів секретів ('{target}') через view_file суворо заборонено!\n"
                     "Криптографічні ключі ядра ізольовані та доступні виключно in-process внутрішніми функціями Python."
                 )
@@ -856,7 +856,7 @@ def main():
             base_name = os.path.basename(normalized)
 
             # ============================================================
-            # LEDGER IMMUTABILITY & SECRET ISOLATION GATE (Kernel v0.9.11)
+            # LEDGER IMMUTABILITY & SECRET ISOLATION GATE (Kernel v0.9.12)
             # ============================================================
             is_ledger_file = (
                 "provenance_ledger" in normalized or
@@ -876,7 +876,7 @@ def main():
                 res = {
                     "decision": "deny",
                     "reason": (
-                        "HARD GATE VIOLATION (Ledger Immutability Gate v0.9.11):\n"
+                        "HARD GATE VIOLATION (Ledger Immutability Gate v0.9.12):\n"
                         f"Пряма модифікація захищених системних файлів ('{target_file}') через інструмент '{name}' суворо заборонена!\n"
                         "Реєстр провененсу, криптографічні секрети та прапорці сесії оновлюються ВИКЛЮЧНО "
                         "внутрішніми модулями ядра Python (apply_passport / save_ledger). "
@@ -1040,7 +1040,7 @@ def main():
                             res = {
                                 "decision": "deny",
                                 "reason": (
-                                    "HARD GATE VIOLATION (In-Memory Replacement Simulation Gate v0.9.10):\n"
+                                    "HARD GATE VIOLATION (In-Memory Replacement Simulation Gate v0.9.12):\n"
                                     f"Симуляція заміни для '{target_file}' завершилася помилкою: {sim_err}.\n"
                                     "Заміна відхилена через невідповідність межам або порожній TargetContent."
                                 )
@@ -1053,7 +1053,7 @@ def main():
                 reserve_reason = ""
                 passport_id = None
 
-                # Спроба резервування криптографічного паспорта (Policy v0.9.10)
+                # Спроба резервування криптографічного паспорта (Policy v0.9.12)
                 if reserve_fn and target_sha256:
                     ok_res, p_id, p_msg = reserve_fn(
                         session_id=sess_id,
@@ -1085,7 +1085,7 @@ def main():
                                 except Exception:
                                     pass
 
-                # Перевірка Contributor Mode для ядра (Kernel v0.9.10)
+                # Перевірка Contributor Mode для ядра (Kernel v0.9.12)
                 if not authorized:
                     is_core_maintenance = (
                         "/core/" in abs_target or
@@ -1106,7 +1106,7 @@ def main():
                     res = {
                         "decision": "deny",
                         "reason": (
-                            "HARD GATE VIOLATION (Cryptographic Hash Passport Integrity Gate v0.9.10):\n"
+                            "HARD GATE VIOLATION (Cryptographic Hash Passport Integrity Gate v0.9.12):\n"
                             f"Заборонено несанкціоноване створення/редагування коду через {name} на '{target_file}'.\n"
                             f"Причина відхилення паспорта: {reserve_reason or 'відсутній валідний MINTED паспорт у леджері'}.\n"
                             "Код зобов'язаний попередньо генеруватися ШІ-моделями (Tier 1 Ollama / Tier 2 Groq) через diagnostic_runner.py, "

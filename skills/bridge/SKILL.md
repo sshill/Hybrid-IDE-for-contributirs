@@ -57,7 +57,7 @@ description: >-
 Виконати динамічний вимір метрик (`core/enclave/enclave_daemon.py --telemetry` або `core/inspect/phase1_inspect.py --telemetry`) та вивести обов'язковий статус:
 `🎯 [DOMAIN: <Домен> | HOST: Linux/Debian]`
 `<Індикатор 🟢/🟡/🔴> [CONTEXT: <S> кроків (~<tok>k tok) | SANDBOX: Host-First BypassSandbox | BATCH ACCESS: Authorized]`
-*(Обов'язково вивести віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у чат!)*
+*(Обов'язково вивести виміряний віджет `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`! Заборона пасивності Zero-Omission: актуальний віджет телеметрії у блоці `text` є обов'язковим для звітів Фази 1, Фази 3 та Фази 5).*
 
 ### 🛑 Крок 2: Бойова перевірка ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):

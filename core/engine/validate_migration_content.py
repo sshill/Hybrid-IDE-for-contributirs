@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-validate_migration_content.py — Deterministic Migration Content & Bridge Validator (Kernel v0.9.10)
+validate_migration_content.py — Deterministic Migration Content & Bridge Validator (Kernel v0.9.12)
 
 Inspects migration artifacts, bridge prompts, and skill files to ensure they do NOT contain:
 1. Anti-regulation circumvention, evasion, or gate-bypass instructions.
 2. Directives to use forbidden inline code execution (python -c, bash -c, eval, here-docs, | sh).
 3. Directives to write state or flags to /tmp or perform shell redirection into protected dirs.
-4. Outdated v0.9.4–v0.9.9 rules or deprecated CLI parameters (--register).
+4. Outdated v0.9.4–v0.9.11 rules or deprecated CLI parameters (--register).
 5. Unanchored blind query directives ('найди щось', 'пошукай когось').
 
 Enforces strict Fail-Closed security, line-scoped evaluation, and pre-match negation checking.
@@ -35,9 +35,9 @@ NEGATION_PREFIX_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Outdated version claims: specifically v0.9.4 through v0.9.10 as the active target version
+# Outdated version claims: specifically v0.9.4 through v0.9.11 as the active target version
 OUTDATED_ACTIVE_VERSION_PATTERN = re.compile(
-    r'(?:актуальний\s+Регламент|Версія\s+Регламенту:?|Hybrid\s+IDE\s+Policy)\s*[`"\'*]*(?:v?0\.9\.(?:[4-9]|10))\b',
+    r'(?:актуальний\s+Регламент|Версія\s+Регламенту:?|Hybrid\s+IDE\s+Policy)\s*[`"\'*]*(?:v?0\.9\.(?:[4-9]|10|11))\b',
     re.IGNORECASE
 )
 
@@ -213,7 +213,7 @@ def validate_migration_file(file_path: str) -> tuple[bool, list[str]]:
 
 def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = None) -> tuple[bool, str]:
     """
-    Generates a canonical Kernel v0.9.10 Bridge Prompt and verifies it through the validator.
+    Generates a canonical Kernel v0.9.12 Bridge Prompt and verifies it through the validator.
     Returns (success: bool, prompt_or_error: str).
     Fail-Closed: on any validation failure, returns (False, error) and prints nothing to stdout.
     """
@@ -238,10 +238,10 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
     if not os.path.isfile(walkthrough_cand):
         walkthrough_cand = os.path.expanduser("~/.gemini/antigravity/brain/walkthrough.md")
 
-    prompt = f"""# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.11)
+    prompt = f"""# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.12)
 
 ## 1. Метадані стану та середовища
-- **Версія Регламенту:** `v0.9.11` (Trusted Enclave Architecture, Multi-Tier AI Gateway, Schema 1.2 HMAC Passports)
+- **Версія Регламенту:** `v0.9.12` (Trusted Enclave Architecture, Multi-Tier AI Gateway, 2D-Telemetry, Phase 5.2 Git State Seal Gate)
 - **Домен:** `{domain_name}` (`{ws}`)
 - **Parent Conversation ID:** `{cid}`
 - **Active Git Branch:** `{git_branch}` (коміт `{git_commit}`)
@@ -272,18 +272,18 @@ def generate_canonical_bridge_prompt(workspace_dir: str = None, conv_id: str = N
 ======================================================================
 [Step 1: Global Plugin Discovery]
   - Шлях плагіна:   ~/.gemini/config/plugins/hybrid-ide/
-  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.11)
-  - Хуки безпеки:   hooks.json (PreToolUse OS Gates, PostToolUse Breaker, Stop)
+  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.12)
+  - Хуки безпеки:   hooks.json (PreToolUse OS Gates v0.9.12, PostToolUse Breaker, Stop)
   - Статус хуків:   🟢 Активно (єдиний глобальний обробник)
 
 [Step 2: Constitutional Kernel Audit]
-  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.11)
+  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.12)
   - OS Hard Gates:  Zero Inline-Eval, Shell State Isolation, Cryptographic Hash Passports, In-Memory Simulation
   - Дисципліна:     5 обов'язкових фаз, Anchored Grounding Gate, Anti-Echo Protocol
 
 [Step 3: Domain Overlay Resolution & Core Policies]
   - Файл оверлею:   {ws}/AGENTS.md
-  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 37/37)
+  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 10 auditor + 37/37)
   - Двогейтовий суверенітет: '+' для локальних змін/коміту; '++' для релізу/пушу
   - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
 
@@ -355,7 +355,7 @@ def audit_skills(repo_root: str = None) -> tuple[bool, dict]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Deterministic Migration Content Validator (Kernel v0.9.10)")
+    parser = argparse.ArgumentParser(description="Deterministic Migration Content Validator (Kernel v0.9.12)")
     parser.add_argument("--file", type=str, help="Path to file to validate against anti-regulation directives")
     parser.add_argument("--audit-skills", action="store_true", help="Audit all skills in repo and global configuration")
     parser.add_argument("--generate-bridge", action="store_true", help="Generate and validate canonical Bridge Prompt (fail-closed)")

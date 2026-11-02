@@ -851,7 +851,7 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
     return True, f"OK (Знайдено {len(matched_entries)} зареєстрованих файлів для моделі {model_claimed})"
 
 def main():
-    parser = argparse.ArgumentParser(description="Phase 4 Provenance Ledger & Anti-Shadow Gate (Policy v0.9.11)")
+    parser = argparse.ArgumentParser(description="Phase 4 Provenance Ledger & Anti-Shadow Gate (Policy v0.9.12)")
     parser.add_argument("--verify", type=str, help="Перевірити валідність провененсу файлу")
     parser.add_argument("--verify-hash", type=str, help="Перевірити валідність SHA256 хешу")
     parser.add_argument("--verify-commit", type=str, help="Перевірити валідність атрибуції моделі в повідомленні коміту")

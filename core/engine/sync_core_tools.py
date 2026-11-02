@@ -125,7 +125,7 @@ def sync(dry_run: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Core tools and skills synchronizer (Kernel v0.9.10)")
+    parser = argparse.ArgumentParser(description="Core tools and skills synchronizer (Kernel v0.9.12)")
     parser.add_argument("--dry-run", action="store_true", help="Simulate sync without modifying disk")
     args = parser.parse_args()
     return sync(dry_run=args.dry_run)

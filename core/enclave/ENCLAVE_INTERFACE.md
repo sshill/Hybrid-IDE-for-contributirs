@@ -1,5 +1,5 @@
 # ENCLAVE_INTERFACE.md
-**Hybrid IDE Enclave Architecture – v0.9.11**  
+**Hybrid IDE Enclave Architecture – v0.9.12**  
 Reference guide for command‑line interface (CLI) options and HTTP service endpoints.
 
 ---
