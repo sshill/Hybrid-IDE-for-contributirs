@@ -157,8 +157,14 @@ def _get_or_create_master_hmac_secret() -> bytes:
         try:
             st = os.stat(parent_dir)
             if st.st_mode & 0o022:
+                try:
+                    os.chmod(parent_dir, 0o700)
+                    st = os.stat(parent_dir)
+                except OSError:
+                    pass
+            if (st.st_mode & 0o002) and hasattr(os, "getuid") and st.st_uid != os.getuid():
                 raise PermissionError(
-                    f"Parent directory {parent_dir} is group/world-writable (mode {oct(st.st_mode)}). "
+                    f"Parent directory {parent_dir} is world-writable by other users (mode {oct(st.st_mode)}, UID {st.st_uid}). "
                     "Refusing to load/store master secret."
                 )
         except OSError as e:
@@ -757,29 +763,51 @@ def register_provenance(
         return False
 
 def verify_provenance(script_path: str) -> tuple[bool, str]:
-    """Верифікація цілісності та походження скрипта перед виконанням."""
-    abs_path = os.path.abspath(script_path)
+    """Верифікація цілісності та походження скрипта перед виконанням (Schema 1.2 + Legacy)."""
+    abs_path = os.path.realpath(os.path.abspath(script_path))
     if not os.path.isfile(abs_path):
         return False, f"Файл не існує: {abs_path}"
 
+    current_hash = get_file_sha256(abs_path)
     ledger = load_ledger()
+
+    # 1. Спершу перевіряємо криптографічні паспорти Schema 1.2
+    passports = ledger.get("passports", {})
+    for p_id, p in passports.items():
+        p_path = os.path.realpath(os.path.abspath(p.get("file_path", "")))
+        if p_path == abs_path and p.get("status") == "APPLIED":
+            expected_hash = p.get("target_sha256")
+            if current_hash != expected_hash:
+                return False, f"Порушення цілісності: хеш на диску ({current_hash[:16]}...) не збігається із зареєстрованим у паспорті {p_id} ({str(expected_hash)[:16]}...)"
+            ok_sig, sig_msg = verify_passport_hmac(p)
+            if not ok_sig:
+                return False, f"Підробка паспорта {p_id}: невалідний HMAC підпис ({sig_msg})"
+            return True, f"OK (Passport: {p_id}, Model: {p.get('model')}, Tier: {p.get('tier')})"
+
+    # 2. Фолбек на застарілий формат Schema 1.0/1.1 (legacy_files)
     legacy = ledger.get("legacy_files", {})
     record = legacy.get(abs_path)
-    if not record:
-        return False, f"Файл не зареєстровано в сесійному реєстрі ШІ-генерації: {abs_path}"
+    if record:
+        if current_hash != record.get("sha256"):
+            return False, f"Порушення цілісності: хеш на диску ({current_hash[:16]}...) не збігається із зареєстрованим ШІ ({record.get('sha256', '')[:16]}...)"
+        return True, f"OK (Legacy Record, Model: {record.get('model')})"
 
-    current_hash = get_file_sha256(abs_path)
-    if current_hash != record.get("sha256"):
-        return False, f"Порушення цілісності: хеш на диску ({current_hash[:16]}...) не збігається із зареєстрованим ШІ ({record.get('sha256', '')[:16]}...)"
-
-    return True, f"OK (Model: {record.get('model')})"
+    return False, f"Файл не зареєстровано в сесійному реєстрі ШІ-генерації: {abs_path}"
 
 def verify_content_sha256(sha256_hash: str) -> tuple[bool, str, dict]:
-    """Пошук відповідності контенту за SHA256 хешем у сесійному/персистентному реєстрі."""
+    """Пошук відповідності контенту за SHA256 хешем у сесійному/персистентному реєстрі (Schema 1.2 + Legacy)."""
     if not sha256_hash:
         return False, "Порожній хеш для перевірки.", {}
 
     ledger = load_ledger()
+
+    # 1. Перевірка паспортів Schema 1.2
+    passports = ledger.get("passports", {})
+    for p_id, p in passports.items():
+        if p.get("target_sha256") == sha256_hash and p.get("status") == "APPLIED":
+            return True, f"OK (Passport: {p_id}, Model: {p.get('model')}, Path: {p.get('file_path')})", p
+
+    # 2. Фолбек на legacy_files
     legacy = ledger.get("legacy_files", {})
     for path, entry in legacy.items():
         if entry.get("sha256") == sha256_hash:
@@ -814,7 +842,7 @@ def run_verified_script(script_path: str, script_args: list) -> int:
         return 1
 
 def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
-    """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1 / v0.9.7)."""
+    """Перевірка атрибуції ШІ-моделі у повідомленні коміту на основі реєстру провененсу (v0.9.1 / v0.9.7 / v0.9.12)."""
     audit_match = re.search(r"audited:\s*([a-zA-Z0-9_\-.:]+)", commit_msg, re.IGNORECASE)
     if audit_match:
         auditor = audit_match.group(1).strip().lower()
@@ -833,10 +861,17 @@ def verify_commit_attribution(commit_msg: str) -> tuple[bool, str]:
 
     ledger = load_ledger()
     legacy = ledger.get("legacy_files", {})
-    if not legacy:
+    passports = ledger.get("passports", {})
+
+    if not legacy and not passports:
         return False, f"Реєстр провененсу порожній: генерацію моделлю '{model_claimed}' не підтверджено."
 
     matched_entries = []
+    for p_id, p in passports.items():
+        p_model = p.get("model", "").strip().lower()
+        if p_model and (model_claimed == p_model or p_model in model_claimed or model_claimed in p_model):
+            matched_entries.append(p.get("file_path"))
+
     for path, entry in legacy.items():
         entry_model = entry.get("model", "").strip().lower()
         if entry_model and (model_claimed == entry_model or entry_model in model_claimed or model_claimed in entry_model):

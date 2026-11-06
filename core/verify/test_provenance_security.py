@@ -38,7 +38,10 @@ from core.provenance.phase4_provenance import (
     save_ledger,
     simulate_replacement,
     verify_chain,
+    verify_commit_attribution,
+    verify_content_sha256,
     verify_passport_hmac,
+    verify_provenance,
 )
 from core.engine.validate_migration_content import (
     generate_canonical_bridge_prompt,
@@ -47,6 +50,7 @@ from core.engine.validate_migration_content import (
 )
 from core.enclave.enclave_daemon import (
     attest_arbiter,
+    calculate_ollama_timeout,
     direct_query_copilot,
     enclave_apply,
     enclave_query,
@@ -884,6 +888,52 @@ class TestProvenanceSecurity(unittest.TestCase):
         self.assertIsInstance(quota_err, bool)
         ans, used_model, used_tier = query_all_tier_ai("Test audit prompt", tier=4.5)
         self.assertIn(used_tier, (4, 4.5, 2))
+
+    def test_verify_provenance_schema_1_2(self):
+        """41. Провененс: верифікація файлу, хешу та коміту за паспортами Schema 1.2 (без залежності від legacy_files)."""
+        model = "qwen2.5-coder:1.5b"
+        p_id = mint_passport(
+            session_id=self.session_id,
+            file_path=self.sample_file,
+            baseline_sha256=self.sample_hash,
+            target_sha256=self.sample_hash,
+            model=model,
+            tier=1
+        )
+        ok_res, _, _ = reserve_passport(self.session_id, self.sample_file, self.sample_hash, self.sample_hash, "test")
+        self.assertTrue(ok_res)
+        ok_app, _ = apply_passport(self.session_id, self.sample_file)
+        self.assertTrue(ok_app)
+
+        # 1. verify_provenance
+        valid_prov, prov_msg = verify_provenance(self.sample_file)
+        self.assertTrue(valid_prov, f"verify_provenance failed: {prov_msg}")
+        self.assertIn("Passport", prov_msg)
+        self.assertIn(p_id, prov_msg)
+
+        # 2. verify_content_sha256
+        valid_hash, hash_msg, entry = verify_content_sha256(self.sample_hash)
+        self.assertTrue(valid_hash, f"verify_content_sha256 failed: {hash_msg}")
+        self.assertIn(p_id, hash_msg)
+
+        # 3. verify_commit_attribution
+        valid_commit, commit_msg = verify_commit_attribution(f"feat(test): add new feature [generated: {model}]")
+        self.assertTrue(valid_commit, f"verify_commit_attribution failed: {commit_msg}")
+        self.assertIn("OK", commit_msg)
+
+    def test_enclave_ollama_adaptive_timeout(self):
+        """42. Анклав: динамічний розрахунок таймауту Ollama за моделлю RouteLLM Throughput Model (ліквідація 30s ліміту)."""
+        # Для 7B з 1500 токенами таймаут має бути понад 800 секунд
+        timeout_7b = calculate_ollama_timeout("qwen2.5-coder:7b", 1500)
+        self.assertGreaterEqual(timeout_7b, 800)
+
+        # Для 3B з 1500 токенами
+        timeout_3b = calculate_ollama_timeout("qwen2.5-coder:3b", 1500)
+        self.assertGreaterEqual(timeout_3b, 200)
+
+        # Базовий мінімум не менше 60 секунд
+        timeout_short = calculate_ollama_timeout("qwen2.5-coder:1.5b", 10)
+        self.assertGreaterEqual(timeout_short, 60)
 
 
 if __name__ == "__main__":

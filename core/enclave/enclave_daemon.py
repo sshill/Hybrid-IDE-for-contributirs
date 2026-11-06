@@ -237,8 +237,19 @@ def direct_query_groq(prompt: str, model: str = "openai/gpt-oss-120b", max_token
         return f"GROQ_ERROR: {e}"
 
 
-def direct_query_ollama(prompt: str, model: str = "qwen2.5-coder:1.5b", num_predict: int = 400) -> str:
-    """Прямий нативний виклик до локальної Ollama через stdlib (loopback 127.0.0.1:11434)."""
+def calculate_ollama_timeout(model: str, num_predict: int) -> int:
+    """
+    Адаптивний таймаут сокета для Ollama за моделлю RouteLLM Throughput Model.
+    Якщо пам'яті вистачає на 7B, модель крутиться стільки, скільки потрібно (без штучного фантомного ліміту).
+    7B: ~2.8 tok/s, 3B: ~10.0 tok/s, 1.5B: ~20.0 tok/s.
+    """
+    speed = 2.8 if "7b" in model.lower() else (10.0 if "3b" in model.lower() else 20.0)
+    expected_sec = (num_predict / speed) + 15.0
+    return max(60, int(1.5 * expected_sec))
+
+
+def direct_query_ollama(prompt: str, model: str = "qwen2.5-coder:1.5b", num_predict: int = 1500) -> str:
+    """Прямий нативний виклик до локальної Ollama через stdlib (loopback 127.0.0.1:11434) з адаптивним таймаутом."""
     url = "http://127.0.0.1:11434/api/generate"
     payload = {
         "model": model,
@@ -249,6 +260,7 @@ def direct_query_ollama(prompt: str, model: str = "qwen2.5-coder:1.5b", num_pred
             "num_predict": num_predict
         }
     }
+    timeout = calculate_ollama_timeout(model, num_predict)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         req = urllib.request.Request(
@@ -256,7 +268,7 @@ def direct_query_ollama(prompt: str, model: str = "qwen2.5-coder:1.5b", num_pred
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
-        with opener.open(req, timeout=30) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data.get("response", "").strip()
     except Exception as e:
@@ -417,12 +429,16 @@ def query_all_tier_ai(
     else:
         resolved_model = model
 
-    direct_res = direct_query_ollama(prompt, model=resolved_model)
+    req_num_predict = 1500 if mode in ("synthesize", "patch") else 600
+    direct_res = direct_query_ollama(prompt, model=resolved_model, num_predict=req_num_predict)
     if direct_res and not direct_res.startswith("OLLAMA_ERROR:"):
         return direct_res, resolved_model, 1
 
     if diag_fns and "query_ollama" in diag_fns:
-        res = diag_fns["query_ollama"](prompt, model=resolved_model)
+        try:
+            res = diag_fns["query_ollama"](prompt, model=resolved_model, num_predict=req_num_predict)
+        except TypeError:
+            res = diag_fns["query_ollama"](prompt, model=resolved_model)
         res_text = res[0] if isinstance(res, tuple) else res
         if res_text and not str(res_text).startswith("ERROR:") and res_text not in ("OLLAMA_OFFLINE", "HARDWARE_LIMIT_EXCEEDED"):
             return res_text, resolved_model, 1
