@@ -207,6 +207,57 @@ def _load_env_keys():
                 pass
 
 
+def save_env_credential(key_name: str, key_val: str, project: str = "270823236470", env_path: str = None) -> bool:
+    """Безпечне збереження облікових даних у ~/.env із правами 0600 (Secret Isolation Gate)."""
+    target_env = env_path or os.path.expanduser("~/.env")
+    lines = []
+    if os.path.isfile(target_env):
+        with open(target_env, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+    keys_to_set = {key_name: key_val}
+    if key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        keys_to_set["GEMINI_API_KEY"] = key_val
+        keys_to_set["GOOGLE_API_KEY"] = key_val
+        if project:
+            keys_to_set["GOOGLE_CLOUD_PROJECT"] = project
+
+    new_lines = []
+    seen = set()
+    for line in lines:
+        matched_k = None
+        for k in keys_to_set:
+            if line.strip().startswith(f"{k}=") or line.strip().startswith(f"export {k}="):
+                matched_k = k
+                break
+        if matched_k:
+            new_lines.append(f'{matched_k}="{keys_to_set[matched_k]}"\n')
+            seen.add(matched_k)
+        else:
+            new_lines.append(line)
+
+    unseen = [k for k in keys_to_set if k not in seen]
+    if unseen:
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines.append("\n")
+        new_lines.append(f"\n# Google Gemini / Vertex AI Project (Project: {project or '270823236470'})\n")
+        for k in unseen:
+            new_lines.append(f'{k}="{keys_to_set[k]}"\n')
+
+    with open(target_env, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+    try:
+        os.chmod(target_env, 0o600)
+    except Exception:
+        pass
+
+    for k, v in keys_to_set.items():
+        os.environ[k] = v
+
+    return True
+
+
 def direct_query_groq(prompt: str, model: str = "openai/gpt-oss-120b", max_tokens: int = 2048) -> str:
     """Прямий нативний виклик до Groq Cloud LPU API (https://api.groq.com/openai/v1/chat/completions)."""
     _load_env_keys()
@@ -520,7 +571,22 @@ def probe_provider_auth(provider_name: str = None) -> dict:
                 "failover": "gemini-2.0-flash (1M tok) -> claude-3-5-sonnet" if quota_err else "None"
             }
 
+    # 7. Claude Sonnet Probe (Tier 4 Arbiter)
+    if not provider_name or provider_name in ("claude", "claude_sonnet", "sonnet"):
+        t0 = time.time()
+        c_out, c_mod, _ = query_all_tier_ai("ping", tier=4, model="claude-3-5-sonnet-20241022")
+        lat = round(time.time() - t0, 2)
+        has_k = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENROUTER_API_KEY"))
+        status = "READY" if ("pong" in c_out.lower() or "ready" in c_out.lower()) else ("POOL_READY" if "Attested" in c_out else "ERROR")
+        results["claude_sonnet"] = {
+            "status": status,
+            "latency_sec": lat,
+            "model": c_mod,
+            "channel": "Direct Anthropic / OpenRouter" if has_k else "GitHub Copilot CLI (Default Arbiter)"
+        }
+
     return results
+
 
 
 def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
@@ -976,11 +1042,16 @@ def run_battle_test() -> dict:
     }
 
     _load_env_keys()
+    t4_start = time.time()
+    t4_out, t4_mod, _ = query_all_tier_ai("ping", tier=4, model="claude-3-5-sonnet-20241022")
+    t4_lat = round(time.time() - t4_start, 2)
     has_k = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENROUTER_API_KEY"))
+    status_t4 = "PASS" if not t4_out.startswith("ERROR:") and not t4_out.startswith("CLAUDE_") else ("POOL_READY" if "Attested" in t4_out else "FAIL")
     results["tier_4_claude"] = {
-        "model": "claude-3-5-sonnet-20241022",
-        "status": "READY" if has_k else "POOL_READY",
-        "channel": "Direct/OpenRouter" if has_k else "Antigravity Pool Attestation Gate"
+        "model": t4_mod,
+        "status": status_t4,
+        "latency_sec": t4_lat,
+        "channel": "Direct/OpenRouter" if has_k else ("GitHub Copilot CLI" if "pong" in t4_out.lower() or "ready" in t4_out.lower() else "Antigravity Pool Attestation Gate")
     }
 
     cop_bin = shutil.which("copilot")
@@ -1329,9 +1400,17 @@ def main():
     parser.add_argument("--attest-arbiter", type=str, nargs="?", const="PASS", help="Зареєструвати вердикт арбітра Antigravity Pool")
     parser.add_argument("--probe-providers", action="store_true", help="Запустити діагностичні зонди авторизації та квот провайдерів")
     parser.add_argument("--provider", type=str, default=None, help="Опитати конкретного провайдера (ollama, groq, gemini, openai, openrouter, copilot)")
+    parser.add_argument("--set-credential", nargs=2, metavar=("KEY", "VALUE"), help="Безпечно зберегти ключ у ~/.env (mode 0600)")
+    parser.add_argument("--project", type=str, default="270823236470", help="ID/Номер проекту Google Cloud")
     parser.add_argument("--verify-chain", action="store_true", help="Верифікувати ланцюг HMAC-паспортів у леджері")
     parser.add_argument("--json-output", action="store_true", help="Вивести результат у JSON")
     args = parser.parse_args()
+
+    if args.set_credential:
+        k_name, k_val = args.set_credential
+        save_env_credential(k_name, k_val, project=args.project)
+        print(f"🔒 [CREDENTIAL STORED] Key {k_name} saved securely to ~/.env (mode 0600)")
+        return 0
 
     if args.daemon:
         run_enclave_daemon(host=args.host, port=args.port)
