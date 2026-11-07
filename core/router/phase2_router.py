@@ -50,11 +50,18 @@ def validate_plan(plan_path: str) -> int:
 
 # Фізичні характеристики пропускної здатності та ресурсів (Throughput Model)
 THROUGHPUT_MAP = {
-    "qwen2.5-coder:1.5b": {"speed": 20.0, "ttft": 0.3, "ram_gb": 1.2, "tier": 1, "provider": "Ollama Local Edge"},
-    "qwen2.5-coder:3b":   {"speed": 10.0, "ttft": 0.6, "ram_gb": 2.2, "tier": 1, "provider": "Ollama Local Edge"},
-    "qwen2.5-coder:7b":   {"speed": 2.8,  "ttft": 1.8, "ram_gb": 5.1, "tier": 1, "provider": "Ollama Local Edge"},
-    "openai/gpt-oss-120b":{"speed": 460.0,"ttft": 0.2, "ram_gb": 0.0, "tier": 2, "provider": "Groq Cloud LPU"},
-    "copilot-cli":        {"speed": 60.0, "ttft": 2.0, "ram_gb": 0.0, "tier": 4.5, "provider": "GitHub Copilot CLI"}
+    "qwen2.5-coder:1.5b": {"speed": 20.0, "ttft": 0.3, "ram_gb": 1.2, "tier": 1, "provider": "Ollama Local Edge", "max_context": 32768},
+    "qwen2.5-coder:3b":   {"speed": 10.0, "ttft": 0.6, "ram_gb": 2.2, "tier": 1, "provider": "Ollama Local Edge", "max_context": 32768},
+    "qwen2.5-coder:7b":   {"speed": 2.8,  "ttft": 1.8, "ram_gb": 5.1, "tier": 1, "provider": "Ollama Local Edge", "max_context": 131072},
+    "qwen2.5-coder:32b":  {"speed": 40.0, "ttft": 0.5, "ram_gb": 0.0, "tier": 2, "provider": "OpenRouter Gateway", "max_context": 131072},
+    "openai/gpt-oss-120b":{"speed": 460.0,"ttft": 0.2, "ram_gb": 0.0, "tier": 2, "provider": "Groq Cloud LPU", "max_context": 131072},
+    "deepseek-r1-distill-70b": {"speed": 85.0, "ttft": 0.4, "ram_gb": 0.0, "tier": 2.5, "provider": "Groq Cloud LPU", "max_context": 131072},
+    "deepseek-r1":        {"speed": 30.0, "ttft": 1.5, "ram_gb": 0.0, "tier": 2.5, "provider": "OpenRouter Gateway", "max_context": 131072},
+    "openai/o3-mini":     {"speed": 50.0, "ttft": 1.2, "ram_gb": 0.0, "tier": 4.1, "provider": "OpenAI / OpenRouter", "max_context": 200000},
+    "claude-3-5-sonnet":  {"speed": 45.0, "ttft": 1.0, "ram_gb": 0.0, "tier": 4, "provider": "Anthropic / Antigravity Pool", "max_context": 200000},
+    "copilot-cli":        {"speed": 60.0, "ttft": 2.0, "ram_gb": 0.0, "tier": 4.5, "provider": "GitHub Copilot CLI", "max_context": 65536},
+    "gemini-2.0-flash":   {"speed": 120.0,"ttft": 0.3, "ram_gb": 0.0, "tier": 4.5, "provider": "Google AI (Heavy Failover)", "max_context": 1048576},
+    "gemini-1.5-pro":     {"speed": 35.0, "ttft": 1.2, "ram_gb": 0.0, "tier": 4.5, "provider": "Google AI (Heavy Failover)", "max_context": 2097152}
 }
 
 # Безпечний робочий бюджет Groq Cloud зі зниженням на 20% (LiteLLM Rate Guard)
@@ -97,7 +104,7 @@ def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec
         selected_tier = 4.5
         selected_model = "copilot-cli"
         provider = "GitHub Copilot CLI"
-        reason = "Монолітний рефакторинг кодової бази / Pre-Release Arbiter Gate: делегується на Tier 4.5 (Copilot CLI)."
+        reason = "Монолітний рефакторинг кодової бази / Pre-Release Arbiter Gate: делегується на Tier 4.5 (Copilot CLI) з Heavy-Context Failover на Gemini (1M-2M токенів)."
     elif allow_cloud and (estimated_out_tokens > 250 or prompt_tokens > 3000 or etc_7b > sla_sec):
         if groq_fits_budget:
             selected_tier = 2
@@ -128,6 +135,13 @@ def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec
     active_etc = estimate_etc(selected_model, estimated_out_tokens)
     adaptive_timeout = calculate_adaptive_timeout(active_etc)
 
+    if selected_tier == 4.5:
+        fallback_chain = ["gemini-2.0-flash", "gemini-1.5-pro", "claude-3-5-sonnet"]
+    elif selected_tier == 1:
+        fallback_chain = ["openai/gpt-oss-120b", "deepseek-r1-distill-70b"]
+    else:
+        fallback_chain = ["qwen2.5-coder:1.5b"]
+
     decision = {
         "tier": selected_tier,
         "provider": provider,
@@ -142,7 +156,7 @@ def calculate_route(prompt_tokens: int, estimated_out_tokens: int = 250, sla_sec
             "safe_minute_quota": GROQ_SAFETY_BUDGET["safe_tpm"],
             "max_single_out_limit": GROQ_SAFETY_BUDGET["max_single_out"]
         },
-        "fallback_chain": ["openai/gpt-oss-120b"] if selected_tier == 1 else ["qwen2.5-coder:1.5b"],
+        "fallback_chain": fallback_chain,
         "reason": reason
     }
     return decision

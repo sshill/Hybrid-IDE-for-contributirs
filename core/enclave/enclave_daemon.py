@@ -304,6 +304,225 @@ def direct_query_openrouter(prompt: str, model: str = "qwen/qwen-2.5-coder-32b-i
         return f"OPENROUTER_ERROR: {e}"
 
 
+def direct_query_gemini(prompt: str, model: str = "gemini-2.0-flash", max_tokens: int = 4096) -> str:
+    """Нативний виклик Google Gemini API (Heavy-Context Arbiter 1M-2M токенів)."""
+    _load_env_keys()
+    api_key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    if not api_key:
+        if os.environ.get("OPENROUTER_API_KEY"):
+            or_model = "google/gemini-2.0-flash-001" if "flash" in model else "google/gemini-1.5-pro"
+            res = direct_query_openrouter(prompt, model=or_model)
+            if not res.startswith("OPENROUTER_"):
+                return res
+        return "GEMINI_KEY_MISSING"
+
+    clean_model = model.replace("google/", "")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": max_tokens
+        }
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "HybridIDE-Enclave/0.9.12"}
+        )
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "").strip()
+            return "GEMINI_EMPTY_RESPONSE"
+    except Exception as e:
+        return f"GEMINI_ERROR: {e}"
+
+
+def direct_query_openai(prompt: str, model: str = "o3-mini", max_tokens: int = 4096) -> str:
+    """Нативний виклик OpenAI API (Reasoning Models o1 / o3-mini)."""
+    _load_env_keys()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        if os.environ.get("OPENROUTER_API_KEY"):
+            or_model = f"openai/{model}"
+            res = direct_query_openrouter(prompt, model=or_model)
+            if not res.startswith("OPENROUTER_"):
+                return res
+        return "OPENAI_KEY_MISSING"
+
+    url = "https://api.openai.com/v1/chat/completions"
+    is_reasoning = model.startswith("o1") or model.startswith("o3")
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    if is_reasoning:
+        payload["max_completion_tokens"] = max_tokens
+    else:
+        payload["max_tokens"] = max_tokens
+        payload["temperature"] = 0.2
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "User-Agent": "HybridIDE-Enclave/0.9.12"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"OPENAI_ERROR: {e}"
+
+
+def probe_provider_auth(provider_name: str = None) -> dict:
+    """
+    Протокол діагностичних тестових зондів авторизації та квот провайдерів ШІ.
+    Перевіряє наявність ключів, конфігів та реальний відгук API без компрометації секретів.
+    """
+    _load_env_keys()
+    results = {}
+
+    # 1. Ollama Local Probe
+    if not provider_name or provider_name == "ollama":
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            req = urllib.request.Request("http://127.0.0.1:11434/api/tags", headers={"User-Agent": "enclave"})
+            with opener.open(req, timeout=3.0) as resp:
+                if resp.status == 200:
+                    tags_data = json.loads(resp.read().decode("utf-8"))
+                    models = [m.get("name") for m in tags_data.get("models", [])]
+                    results["ollama"] = {
+                        "status": "READY",
+                        "provider": "Ollama Local Loopback (127.0.0.1:11434)",
+                        "installed_models": models,
+                        "auth_type": "zero-auth"
+                    }
+                else:
+                    results["ollama"] = {"status": "LOCAL_ERROR", "http_code": resp.status}
+        except Exception as e:
+            results["ollama"] = {
+                "status": "LOCAL_OFFLINE",
+                "error": "Ollama daemon not reachable on loopback 11434 (run 'systemctl --user start ollama')"
+            }
+
+    # 2. Groq LPU Probe
+    if not provider_name or provider_name == "groq":
+        k = os.environ.get("GROQ_API_KEY", "").strip()
+        if not k:
+            results["groq"] = {"status": "KEY_MISSING", "auth_type": "Bearer API Key", "note": "Add GROQ_API_KEY to ~/.env"}
+        else:
+            t0 = time.time()
+            ping_res = direct_query_groq("ping", model="openai/gpt-oss-120b")
+            lat = round(time.time() - t0, 2)
+            if ping_res.startswith("GROQ_ERROR:"):
+                err_str = ping_res.lower()
+                status = "UNAUTHORIZED" if ("401" in err_str or "unauthorized" in err_str) else ("QUOTA_EXHAUSTED" if "429" in err_str else "API_ERROR")
+                results["groq"] = {"status": status, "latency_sec": lat}
+            else:
+                results["groq"] = {
+                    "status": "READY",
+                    "auth_type": "Bearer API Key (Active)",
+                    "latency_sec": lat,
+                    "models": ["openai/gpt-oss-120b", "deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile"]
+                }
+
+    # 3. Google Gemini Probe (Heavy-Context Failover 1M-2M)
+    if not provider_name or provider_name == "gemini":
+        k = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+        if not k:
+            results["gemini"] = {"status": "KEY_MISSING", "auth_type": "Google AI Studio Key", "max_context": 2000000, "note": "Add GEMINI_API_KEY to ~/.env"}
+        else:
+            t0 = time.time()
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={k}"
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "HybridIDE-Enclave"})
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    lat = round(time.time() - t0, 2)
+                    results["gemini"] = {
+                        "status": "READY",
+                        "auth_type": "GEMINI_API_KEY (Active)",
+                        "latency_sec": lat,
+                        "max_context": 2000000,
+                        "models": ["gemini-2.0-flash (1M tok)", "gemini-1.5-pro (2M tok)"]
+                    }
+            except urllib.error.HTTPError as he:
+                status = "UNAUTHORIZED" if he.code in (401, 403) else ("QUOTA_EXHAUSTED" if he.code == 429 else f"HTTP_{he.code}")
+                results["gemini"] = {"status": status, "http_code": he.code, "max_context": 2000000}
+            except Exception as e:
+                results["gemini"] = {"status": "NETWORK_ERROR", "error": str(e), "max_context": 2000000}
+
+    # 4. OpenAI Probe (o1, o3-mini Reasoning)
+    if not provider_name or provider_name == "openai":
+        k = os.environ.get("OPENAI_API_KEY", "").strip()
+        if not k:
+            results["openai"] = {"status": "KEY_MISSING", "auth_type": "OpenAI API Key", "models": ["o3-mini", "o1"], "note": "Add OPENAI_API_KEY to ~/.env"}
+        else:
+            t0 = time.time()
+            url = "https://api.openai.com/v1/models"
+            try:
+                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {k}", "User-Agent": "HybridIDE-Enclave"})
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    lat = round(time.time() - t0, 2)
+                    results["openai"] = {"status": "READY", "auth_type": "OPENAI_API_KEY (Active)", "latency_sec": lat, "models": ["o3-mini", "o1", "gpt-4o"]}
+            except urllib.error.HTTPError as he:
+                status = "UNAUTHORIZED" if he.code in (401, 403) else ("INSUFFICIENT_QUOTA" if he.code == 429 else f"HTTP_{he.code}")
+                results["openai"] = {"status": status, "http_code": he.code, "note": "Requires active OpenAI Usage Tier 1-5 deposit"}
+            except Exception as e:
+                results["openai"] = {"status": "NETWORK_ERROR", "error": str(e)}
+
+    # 5. OpenRouter Probe
+    if not provider_name or provider_name == "openrouter":
+        k = os.environ.get("OPENROUTER_API_KEY", "").strip()
+        if not k:
+            results["openrouter"] = {"status": "KEY_MISSING", "auth_type": "OpenRouter Key", "note": "Add OPENROUTER_API_KEY to ~/.env"}
+        else:
+            t0 = time.time()
+            url = "https://openrouter.ai/api/v1/auth/key"
+            try:
+                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {k}", "User-Agent": "HybridIDE-Enclave"})
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    lat = round(time.time() - t0, 2)
+                    kd = json.loads(resp.read().decode("utf-8")).get("data", {})
+                    limit = kd.get("limit")
+                    usage = kd.get("usage")
+                    results["openrouter"] = {
+                        "status": "READY",
+                        "auth_type": "OpenRouter API Key (Active)",
+                        "latency_sec": lat,
+                        "limit": limit,
+                        "usage": usage
+                    }
+            except urllib.error.HTTPError as he:
+                status = "UNAUTHORIZED" if he.code in (401, 403) else ("QUOTA_EXHAUSTED" if he.code == 429 else f"HTTP_{he.code}")
+                results["openrouter"] = {"status": status, "http_code": he.code}
+            except Exception as e:
+                results["openrouter"] = {"status": "NETWORK_ERROR", "error": str(e)}
+
+    # 6. Copilot CLI Probe
+    if not provider_name or provider_name == "copilot":
+        cop_bin = shutil.which("copilot")
+        if not cop_bin:
+            results["copilot"] = {"status": "NOT_FOUND", "failover": "gemini-2.0-flash (1M tok)"}
+        else:
+            _, quota_err = direct_query_copilot("ping", mode="audit")
+            results["copilot"] = {
+                "status": "READY" if not quota_err else "FAILOVER_TRIGGERED",
+                "failover": "gemini-2.0-flash (1M tok) -> claude-3-5-sonnet" if quota_err else "None"
+            }
+
+    return results
+
+
 def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
     """
     Host-First виклик GitHub Copilot CLI з виявленням вичерпання квоти (Failover Gate).
@@ -375,14 +594,40 @@ def query_all_tier_ai(
     """
     _, diag_fns = _resolve_core_imports()
 
-    # 1. Tier 4.5 (Copilot CLI) з Failover Gate на Tier 4 (Claude Sonnet)
+    # 1. Tier 4.5 (Copilot CLI) з Failover Gate на Gemini (1M-2M токенів) та Tier 4 (Claude Sonnet)
     if tier == 4.5 or model == "copilot-cli":
         cop_out, quota_exceeded = direct_query_copilot(prompt, mode=mode)
         if not quota_exceeded and not cop_out.startswith("COPILOT_"):
             return cop_out, "copilot-cli", 4.5
-        print("⚠️ [FAILOVER GATE]: Copilot CLI quota exceeded or offline. Auto-redirecting to Tier 4 (Claude Sonnet)...", file=sys.stderr)
+        print("⚠️ [FAILOVER GATE]: Copilot CLI quota exceeded or offline. Initiating Heavy-Context Failover to Gemini 2.0 Flash (1M tok)...", file=sys.stderr)
+        gem_res = direct_query_gemini(prompt, model="gemini-2.0-flash")
+        if not gem_res.startswith("GEMINI_"):
+            return gem_res, "gemini-2.0-flash", 4.5
+        print("⚠️ [FAILOVER GATE]: Gemini fallback unavailable. Secondary routing to Tier 4 (Claude Sonnet)...", file=sys.stderr)
         tier = 4
         model = "claude-3-5-sonnet-20241022"
+
+    # 1.5. Tier 4.1 / Tier 4-R (OpenAI Reasoning: o1, o3-mini)
+    if tier == 4.1 or (model and ("o1" in model.lower() or "o3" in model.lower())):
+        resolved_model = model or "o3-mini"
+        oa_res = direct_query_openai(prompt, model=resolved_model)
+        if not oa_res.startswith("OPENAI_"):
+            return oa_res, resolved_model, 4.1
+        print(f"⚠️ [REASONING FAILOVER]: {resolved_model} unavailable. Falling back to DeepSeek-R1 (Tier 2.5)...", file=sys.stderr)
+        tier = 2.5
+        model = "deepseek-r1-distill-llama-70b"
+
+    # 1.6. Tier 2.5 (DeepSeek-R1 Reasoning)
+    if tier == 2.5 or (model and "deepseek" in model.lower()):
+        resolved_model = model or "deepseek-r1-distill-llama-70b"
+        groq_r1 = direct_query_groq(prompt, model="deepseek-r1-distill-llama-70b")
+        if not groq_r1.startswith("GROQ_"):
+            return groq_r1, "deepseek-r1-distill-llama-70b", 2.5
+        or_r1 = direct_query_openrouter(prompt, model="deepseek/deepseek-r1")
+        if not or_r1.startswith("OPENROUTER_"):
+            return or_r1, "deepseek/deepseek-r1", 2.5
+        tier = 2
+        model = "openai/gpt-oss-120b"
 
     # 2. Tier 4 (Claude Sonnet Arbiter)
     if tier == 4 or (model and "claude" in model.lower()):
@@ -907,6 +1152,7 @@ def get_tools_help() -> dict:
                 }
             },
             "GET /battle-test": "Запуск 4-Tier Battle Test (Ollama, Groq, Claude Sonnet, Copilot CLI probe).",
+            "GET /probe-providers": "Діагностичні зонди перевірки авторизації, підписок та квот провайдерів (Ollama, Groq, Gemini, OpenAI, OpenRouter, Copilot CLI).",
             "GET /telemetry": "Зняття 2D-телеметрії сесії (кроки, Nin/Nout, зона здоров'я контексту).",
             "GET /verify-chain": "Детерміністична верифікація ланцюга HMAC-паспортів у леджері.",
             "POST /attest": "Реєстрація вердикту арбітра від Antigravity Pool ({'verdict': 'PASS'})."
@@ -930,6 +1176,8 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
             resp = get_tools_help()
         elif self.path in ("/battle-test", "/battletest"):
             resp = run_battle_test()
+        elif self.path in ("/probe-providers", "/probe_providers"):
+            resp = probe_provider_auth()
         elif self.path == "/telemetry":
             resp = get_telemetry()
         elif self.path in ("/verify-chain", "/verify_chain"):
@@ -1079,12 +1327,30 @@ def main():
     parser.add_argument("--telemetry", action="store_true", help="Вивести 2D-телеметрію контексту")
     parser.add_argument("--check-all", action="store_true", help="Запустити діагностику анклаву")
     parser.add_argument("--attest-arbiter", type=str, nargs="?", const="PASS", help="Зареєструвати вердикт арбітра Antigravity Pool")
+    parser.add_argument("--probe-providers", action="store_true", help="Запустити діагностичні зонди авторизації та квот провайдерів")
+    parser.add_argument("--provider", type=str, default=None, help="Опитати конкретного провайдера (ollama, groq, gemini, openai, openrouter, copilot)")
     parser.add_argument("--verify-chain", action="store_true", help="Верифікувати ланцюг HMAC-паспортів у леджері")
     parser.add_argument("--json-output", action="store_true", help="Вивести результат у JSON")
     args = parser.parse_args()
 
     if args.daemon:
         run_enclave_daemon(host=args.host, port=args.port)
+        return 0
+
+    if args.probe_providers:
+        probes = probe_provider_auth(provider_name=args.provider)
+        if args.json_output:
+            print(json.dumps(probes, indent=2))
+        else:
+            print("🛡️ [PROVIDER AUTH & SUBSCRIPTION PROBES]:")
+            for p_name, p_info in probes.items():
+                auth_str = p_info.get('auth_type') or 'N/A'
+                lat = f"{p_info.get('latency_sec')}s" if 'latency_sec' in p_info else 'N/A'
+                print(f"  • {p_name:<12}: status={p_info.get('status')} auth={auth_str} latency={lat}")
+                if "failover" in p_info:
+                    print(f"    ↳ failover: {p_info['failover']}")
+                if "models" in p_info:
+                    print(f"    ↳ models: {', '.join(p_info['models'])}")
         return 0
 
     if args.query:

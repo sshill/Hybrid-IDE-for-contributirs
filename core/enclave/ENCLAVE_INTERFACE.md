@@ -46,8 +46,18 @@ Both interfaces share a common **state machine** that progresses through five we
 | `--help-tools` | General | Prints extended help for auxiliary tools (`arbiter`, `verifier`, `monitor`). | `enclave --help-tools` |
 | `--query <expr>` | Query | Executes a JMESPath‑compatible query against the enclave’s current state. | `enclave query --query "tasks[?status=='failed']"` |
 | `--target <uri>` | General | Overrides the default enclave service URI (e.g., `http://localhost:8080`). | `enclave apply --target https://api.example.com/enclave` |
-| `--attest-arbiter <key-id>` | Attestation | Specifies the arbiter key used to sign the attestation bundle. | `enclave attest --attest-arbiter 0xdeadbeef` |
-| `--verify-chain` | Attestation | Validates the full attestation chain against a trusted root; exits non‑zero on failure. | `enclave verify --verify-chain` |
-| `--help` | General | Shows the standard help message. | `enclave --help` |
+| `--attest-arbiter <verdict>` | Attestation | Реєстрація вердикту арбітра Antigravity Pool (PASS). | `enclave --attest-arbiter PASS` |
+| `--probe-providers` | Diagnostics | Зонди авторизації/квот (Ollama, Groq, Gemini, OpenAI, OpenRouter, Copilot). | `enclave --probe-providers` |
+| `--provider <name>` | Diagnostics | Опитування конкретного провайдера (`gemini`, `openai`, `ollama` тощо). | `enclave --probe-providers --provider gemini` |
+| `--verify-chain` | Attestation | Верифікація ланцюга HMAC-паспортів у леджері. | `enclave --verify-chain` |
+| `--help` | General | Стандартна довідка параметрів. | `enclave --help` |
 
-**Typical CLI workflow**
+## HTTP Endpoints
+- `GET /probe-providers` – діагностичні зонди авторизації та квот провайдерів ШІ.
+- `GET /battle-test` – 4-Tier AI Battle Test (Ollama, Groq, Claude Sonnet, Copilot probe).
+- `GET /telemetry` – 2D-телеметрія активної сесії.
+- `GET /verify-chain` – детерміністична перевірка ланцюга HMAC-паспортів леджера.
+- `POST /apply` – атомарний синтез/патч із первинним контролем та випуском паспорта.
+- `POST /query` – суверенний шлюз ШІ з Failover (Copilot -> Gemini 1M/2M -> Claude).
+- `POST /attest` – фіксація вердикту арбітра Antigravity Pool.
+
