@@ -29,4 +29,8 @@ scratch/
 distribution/
 *_state.json
 
+# Local whitepapers and private documents
+Databricks_Enterprise_Architecture_QA_Serhii_Khylevych.pdf
+*.pdf
+
 
