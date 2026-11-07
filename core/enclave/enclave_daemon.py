@@ -26,7 +26,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, HTTPServer, BaseHTTPRequestHandler
 
 sys.dont_write_bytecode = True
 
@@ -757,6 +757,32 @@ def get_telemetry() -> dict:
     tokens_in = 3000
     tokens_out = 800
     ram_gb = 8.0
+    zone_label = "🟢 Оптимальна (Zone 1)"
+    zone = 1
+
+    # Спроба зчитати актуальний прапорець телеметрії сесії
+    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+    if os.path.isdir(brain_root):
+        cands = []
+        try:
+            for sdir in os.listdir(brain_root):
+                p = os.path.join(brain_root, sdir, ".system_generated", "flags", "telemetry.json")
+                if os.path.isfile(p):
+                    try:
+                        cands.append((os.path.getmtime(p), p))
+                    except Exception:
+                        pass
+            if cands:
+                cands.sort(key=lambda x: x[0], reverse=True)
+                with open(cands[0][1], "r", encoding="utf-8") as f:
+                    tdata = json.load(f)
+                    steps = tdata.get("steps", steps)
+                    tokens_in = tdata.get("nin", tokens_in)
+                    tokens_out = tdata.get("nout", tokens_out)
+                    zone_label = tdata.get("zone", zone_label)
+        except Exception:
+            pass
+
     try:
         with open("/proc/meminfo", "r", encoding="utf-8") as f:
             for line in f:
@@ -768,13 +794,16 @@ def get_telemetry() -> dict:
 
     if steps <= 600 and tokens_in <= 3000:
         zone = 1
-        zone_label = "🟢 Оптимальна (Zone 1)"
+        if "Зона" not in zone_label and "ЗОНА" not in zone_label:
+            zone_label = "🟢 Оптимальна (Zone 1)"
     elif steps <= 800 and tokens_in <= 6000:
         zone = 2
-        zone_label = "🟡 Насичена (Zone 2)"
+        if "Зона" not in zone_label and "ЗОНА" not in zone_label:
+            zone_label = "🟡 Насичена (Zone 2)"
     else:
         zone = 3
-        zone_label = "🔴 Глибока сесія (Zone 3)"
+        if "Зона" not in zone_label and "ЗОНА" not in zone_label:
+            zone_label = "🔴 Глибока сесія (Zone 3)"
 
     return {
         "steps": steps,
@@ -797,6 +826,20 @@ def attest_arbiter(verdict: str = "PASS", arbiter: str = "Antigravity Pool (Clau
     except Exception:
         pass
 
+    # Також фіксація в активній brain-сесії
+    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+    if os.path.isdir(brain_root):
+        try:
+            cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+            if cands:
+                cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                sg_flags = os.path.join(cands[0], ".system_generated", "flags")
+                os.makedirs(sg_flags, exist_ok=True)
+                with open(os.path.join(sg_flags, "claude_verified.flag"), "w", encoding="utf-8") as bf:
+                    bf.write(f"CLAUDE_VERIFIED: verdict={verdict} arbiter={arbiter} timestamp={time.time()}\n")
+        except Exception:
+            pass
+
     if diag_fns and "write_session_flag" in diag_fns:
         diag_fns["write_session_flag"](
             "claude_verified.flag",
@@ -810,6 +853,7 @@ def attest_arbiter(verdict: str = "PASS", arbiter: str = "Antigravity Pool (Clau
         "flag_file": flag_path,
         "timestamp": time.time()
     }
+
 
 
 def enclave_verify_chain() -> dict:
@@ -973,8 +1017,9 @@ def run_enclave_daemon(host: str = DEFAULT_ENCLAVE_HOST, port: int = DEFAULT_ENC
     """Запуск фонового демона анклаву на loopback інтерфейсі 127.0.0.1."""
     server_address = (host, port)
     try:
-        httpd = HTTPServer(server_address, EnclaveHTTPHandler)
-        print(f"🔒 [ENCLAVE DAEMON STARTED] Listening strictly on http://{host}:{port}")
+        httpd = ThreadingHTTPServer(server_address, EnclaveHTTPHandler)
+        httpd.daemon_threads = True
+        print(f"🔒 [ENCLAVE DAEMON STARTED] Listening strictly on http://{host}:{port} (Multi-Threaded)")
         print("  • Tiers available: Tier 1 (Ollama), Tier 2 (Groq), Tier 4 (Claude Sonnet), Tier 4.5 (Copilot CLI)")
         print("  • Primary Control: Anti-Echo, AST, HMAC Passports, Atomic Writes, Ledger Sync")
         print("Press Ctrl+C to terminate.")

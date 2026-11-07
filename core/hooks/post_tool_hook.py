@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hybrid-IDE PostToolUse hook: Runtime Circuit Breaker (C4). stdlib only."""
 import fcntl
+import hashlib
 import json
 import os
 import sys
@@ -25,16 +26,30 @@ def log(msg):
         pass
 
 def resolve_cb_file(data=None):
-    """Визначає персистентний шлях файлу circuit breaker (Brain-First + /tmp fallback)."""
+    """Визначає персистентний шлях файлу circuit breaker (Brain-First + /tmp fallback з ізоляцією за сесією)."""
     if data and isinstance(data, dict):
+        conv_id = data.get("conversationId") or data.get("conversation_id") or ""
         art_dir = data.get("artifactDirectoryPath")
-        if art_dir and os.path.exists(art_dir):
-            sg = os.path.join(art_dir, ".system_generated")
-            try:
-                os.makedirs(sg, exist_ok=True)
-                return os.path.join(sg, "circuit_breaker_fails.txt")
-            except Exception:
-                pass
+        wps = data.get("workspacePaths", [])
+        if conv_id:
+            sess_id = hashlib.sha256(conv_id.encode("utf-8")).hexdigest()[:8]
+        elif wps and wps[0]:
+            sess_id = hashlib.sha256(wps[0].encode("utf-8")).hexdigest()[:8]
+        else:
+            sess_id = hashlib.sha256(os.getcwd().encode("utf-8")).hexdigest()[:8]
+
+        sess_cb = f"/tmp/antigravity_circuit_breaker_fails_{sess_id}.txt"
+        brain_root = os.path.realpath(os.path.expanduser("~/.gemini/antigravity/brain"))
+        if art_dir:
+            real_art = os.path.realpath(art_dir)
+            if real_art == brain_root or real_art.startswith(brain_root + os.sep):
+                sg = os.path.join(real_art, ".system_generated")
+                try:
+                    os.makedirs(sg, exist_ok=True)
+                    return os.path.join(sg, "circuit_breaker_fails.txt")
+                except Exception:
+                    pass
+        return sess_cb
     return CB_FILE
 
 def read_fails(cb_path=CB_FILE):
@@ -52,7 +67,8 @@ def read_fails(cb_path=CB_FILE):
     return 0
 
 def write_fails(n, cb_path=CB_FILE):
-    for p in set([cb_path, CB_FILE]):
+    targets = [cb_path]
+    for p in targets:
         try:
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w") as f:
@@ -61,12 +77,14 @@ def write_fails(n, cb_path=CB_FILE):
             log(f"cannot write breaker file {p}: {e}")
 
 def reset(cb_path=CB_FILE):
-    for p in set([cb_path, CB_FILE]):
+    targets = set([cb_path, CB_FILE])
+    for p in targets:
         try:
             if os.path.exists(p):
                 os.remove(p)
         except Exception:
             pass
+
 
 def find_exit_code(data):
     containers = [data]

@@ -140,7 +140,7 @@ def main():
 
     brain_state_dir = None
     brain_root = os.path.realpath(os.path.expanduser("~/.gemini/antigravity/brain"))
-    if artifact_dir and os.path.exists(artifact_dir):
+    if artifact_dir:
         real_art = os.path.realpath(artifact_dir)
         if real_art == brain_root or real_art.startswith(brain_root + os.sep):
             brain_state_dir = os.path.join(real_art, ".system_generated")
@@ -196,6 +196,9 @@ def main():
     all_step_files = [f for f in (brain_step_file, step_file) if f]
     all_claude_flags = [f for f in (brain_claude_flag, "/tmp/antigravity_claude_verified.flag") if f]
     all_copilot_flags = [f for f in (brain_copilot_flag, brain_copilot_auth_flag, f"/tmp/antigravity_copilot_executed_{sess_id}.flag") if f]
+    brain_cb_file = os.path.join(brain_state_dir, "circuit_breaker_fails.txt") if brain_state_dir else None
+    sess_cb_file = f"/tmp/antigravity_circuit_breaker_fails_{sess_id}.txt"
+    all_cb_files = [f for f in (brain_cb_file, sess_cb_file) if f]
 
     # ============================================================
     # 0. HARD DENY GATE: Залізний бар'єр заборонених деструктивних команд
@@ -329,28 +332,34 @@ def main():
                     return
 
         # ============================================================
-        # RUNTIME CIRCUIT BREAKER GATE (v0.8.2): Зупинка після 2 збоїв
+        # RUNTIME CIRCUIT BREAKER GATE (Kernel v0.9.12 Session-Isolated): Зупинка після 2 збоїв
         # ============================================================
-        cb_file = "/tmp/antigravity_circuit_breaker_fails.txt"
-        if os.path.exists(cb_file) and not ("git status" in cmd_line or "validate_general_policy" in cmd_line):
-            try:
-                with open(cb_file, "r") as f:
-                    fails = int(f.read().strip())
-                if fails >= 2:
-                    log(f"HARD DENY: Circuit Breaker triggered ({fails} consecutive failures)")
-                    res = {
-                        "decision": "deny",
-                        "reason": (
-                            "HARD GATE VIOLATION (Runtime Circuit Breaker Tripped v0.8.2):\n"
-                            f"Зафіксовано {fails} послідовних збоїв виконання скрипта/команди.\n"
-                            "Автоматичний ReAct цикл зупинено для захисту токенів та запобігання зацикленню.\n"
-                            "Опублікуйте проміжний звіт у чат та узгодьте план дій із користувачем."
-                        )
-                    }
-                    print(json.dumps(res))
-                    return
-            except Exception:
-                pass
+        fails = 0
+        cb_candidates = all_cb_files + ["/tmp/antigravity_circuit_breaker_fails.txt"]
+        for cbp in cb_candidates:
+            if os.path.exists(cbp):
+                try:
+                    with open(cbp, "r") as f:
+                        f_val = int(f.read().strip())
+                        if f_val > fails:
+                            fails = f_val
+                except Exception:
+                    pass
+
+        if fails >= 2 and not ("git status" in cmd_line or "validate_general_policy" in cmd_line or "phase5_verify" in cmd_line or "--reset-breaker" in cmd_line):
+            log(f"HARD DENY: Circuit Breaker triggered ({fails} consecutive failures for session {sess_id})")
+            res = {
+                "decision": "deny",
+                "reason": (
+                    "HARD GATE VIOLATION (Runtime Circuit Breaker Tripped v0.9.12):\n"
+                    f"Зафіксовано {fails} послідовних збоїв виконання скрипта/команди у поточній сесії.\n"
+                    "Автоматичний ReAct цикл зупинено для захисту токенів та запобігання зацикленню.\n"
+                    "Опублікуйте проміжний звіт у чат та узгодьте план дій із користувачем."
+                )
+            }
+            print(json.dumps(res))
+            return
+
 
         # ============================================================
         # ZERO INLINE-EVAL GATE (v0.8.2): Повна заборона інлайн-коду та Here-docs

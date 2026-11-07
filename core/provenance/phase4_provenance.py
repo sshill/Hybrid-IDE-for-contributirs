@@ -20,10 +20,12 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 
 SCHEMA_VERSION = "1.2"
+_LEDGER_THREAD_LOCK = threading.RLock()
 V0_9_11_CUTOVER_TIMESTAMP = 1793050000.0
 
 GENERATIVE_MODELS_ALLOWLIST = {
@@ -354,44 +356,49 @@ def _save_ledger_unlocked(ledger: dict):
 def locked_ledger():
     """
     Канонічний атомарний контекстний менеджер для циклу read-modify-write.
-    Захоплює fcntl.flock(LOCK_EX) на весь життєвий цикл операції з леджером.
+    Поєднує внутрішньопроцесний threading.RLock() та міжпроцесний fcntl.flock(LOCK_EX)
+    на весь життєвий цикл операції з леджером, гарантуючи повну thread-safety.
     """
     lock_path = get_canonical_lock_path()
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
-    with open(lock_path, "w") as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
-        try:
-            ledger = _load_ledger_unlocked()
-            yield ledger
-            _save_ledger_unlocked(ledger)
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
+    with _LEDGER_THREAD_LOCK:
+        with open(lock_path, "a") as lock_f:
+            fcntl.flock(lock_f, fcntl.LOCK_EX)
+            try:
+                ledger = _load_ledger_unlocked()
+                yield ledger
+                _save_ledger_unlocked(ledger)
+            finally:
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 def load_ledger() -> dict:
-    """Read-only завантаження реєстру з безпечним lock."""
+    """Read-only завантаження реєстру з безпечним thread та process lock."""
     lock_path = get_canonical_lock_path()
-    if os.path.exists(lock_path):
-        try:
-            with open(lock_path, "w") as lock_f:
-                fcntl.flock(lock_f, fcntl.LOCK_SH)
-                try:
-                    return _load_ledger_unlocked()
-                finally:
-                    fcntl.flock(lock_f, fcntl.LOCK_UN)
-        except Exception:
-            pass
-    return _load_ledger_unlocked()
+    with _LEDGER_THREAD_LOCK:
+        if os.path.exists(lock_path):
+            try:
+                with open(lock_path, "a") as lock_f:
+                    fcntl.flock(lock_f, fcntl.LOCK_SH)
+                    try:
+                        return _load_ledger_unlocked()
+                    finally:
+                        fcntl.flock(lock_f, fcntl.LOCK_UN)
+            except Exception:
+                pass
+        return _load_ledger_unlocked()
 
 def save_ledger(ledger: dict):
-    """Синхронне збереження реєстру під ексклюзивним lock."""
+    """Синхронне збереження реєстру під комбінованим ексклюзивним lock."""
     lock_path = get_canonical_lock_path()
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
-    with open(lock_path, "w") as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
-        try:
-            _save_ledger_unlocked(ledger)
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
+    with _LEDGER_THREAD_LOCK:
+        with open(lock_path, "a") as lock_f:
+            fcntl.flock(lock_f, fcntl.LOCK_EX)
+            try:
+                _save_ledger_unlocked(ledger)
+            finally:
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
+
 
 def mint_passport(
     session_id: str,

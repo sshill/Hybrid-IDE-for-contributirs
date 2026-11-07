@@ -319,6 +319,7 @@ def resolve_transcript_path(conversation_id: str = None, transcript_path: str = 
         cand_alt = brain_base / conversation_id / "transcript.jsonl"
         if cand_alt.is_file():
             return str(cand_alt)
+        return ""
 
     if brain_base.is_dir():
         candidates = []
@@ -327,11 +328,46 @@ def resolve_transcript_path(conversation_id: str = None, transcript_path: str = 
                 tfile = sdir / ".system_generated" / "logs" / "transcript.jsonl"
                 if tfile.is_file():
                     candidates.append((tfile.stat().st_mtime, str(tfile)))
+                else:
+                    tfile_alt = sdir / "transcript.jsonl"
+                    if tfile_alt.is_file():
+                        candidates.append((tfile_alt.stat().st_mtime, str(tfile_alt)))
         if candidates:
             candidates.sort(key=lambda x: x[0], reverse=True)
             return candidates[0][1]
 
     return ""
+
+
+def scan_all_sessions(recent_n: int = None) -> list[dict]:
+    brain_base = Path(os.path.expanduser("~/.gemini/antigravity/brain"))
+    results = []
+    if not brain_base.is_dir():
+        return results
+
+    sessions = []
+    for sdir in brain_base.iterdir():
+        if sdir.is_dir():
+            tfile = sdir / ".system_generated" / "logs" / "transcript.jsonl"
+            if not tfile.is_file():
+                tfile = sdir / "transcript.jsonl"
+            if tfile.is_file():
+                sessions.append((tfile.stat().st_mtime, sdir.name, str(tfile)))
+
+    sessions.sort(key=lambda x: x[0], reverse=True)
+    if recent_n and recent_n > 0:
+        sessions = sessions[:recent_n]
+
+    for mtime, conv_id, t_path in sessions:
+        records = parse_transcript_file(t_path)
+        auditor = ChatContextAuditor(strict=False)
+        rep = auditor.audit_transcript(records, check_live_git=False)
+        rep["conversation_id"] = conv_id
+        rep["transcript_path"] = t_path
+        results.append(rep)
+
+    return results
+
 
 
 def parse_transcript_file(path: str) -> list[dict]:
@@ -382,6 +418,8 @@ def main():
     parser.add_argument("--conversation-id", type=str, help="ID сесії (brain-каталог)")
     parser.add_argument("--transcript", type=str, help="Шлях до файлу transcript.jsonl")
     parser.add_argument("--current-session", action="store_true", help="Авто-резолв поточної активної сесії")
+    parser.add_argument("--scan-all", action="store_true", help="Пакетний аудит усіх збережених сесій / тредів")
+    parser.add_argument("--recent-sessions", type=int, default=None, help="Пакетний аудит N останніх сесій")
     parser.add_argument("--strict", action="store_true", help="Повернути ненульовий код при порушеннях")
     parser.add_argument("--json", action="store_true", help="Вивести результат у форматі JSON")
     parser.add_argument("--git-sha-manifest", action="store_true", help="Сформувати Git SHA-256 маніфест змінених файлів")
@@ -397,6 +435,28 @@ def main():
             for k, v in manifest.items():
                 print(f"  • {k}: {v}")
         return 0
+
+    if args.scan_all or args.recent_sessions is not None:
+        results = scan_all_sessions(recent_n=args.recent_sessions)
+        if args.json:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 70)
+            print("🛡️ [MULTI-THREAD CHAT CONTEXT AUDIT BATCH REPORT v0.9.12]")
+            print(f"📊 Всього проаналізовано сесій: {len(results)}")
+            print("=" * 70)
+            passed = sum(1 for r in results if r.get("status") == "PASS")
+            failed = len(results) - passed
+            for r in results:
+                status_icon = "🟢 PASS" if r.get("status") == "PASS" else "🔴 FAIL"
+                cid = r.get("conversation_id", "")[:18]
+                steps = r.get("total_steps", 0)
+                viols = r.get("violations_count", 0)
+                print(f"  • {status_icon} | ID: {cid}... | Кроки: {steps:4d} | Порушень: {viols:2d}")
+            print("-" * 70)
+            print(f"Підсумок: 🟢 PASS: {passed} | 🔴 FAIL: {failed}")
+        return 0 if not (args.strict and failed > 0) else 1
+
 
     t_path = resolve_transcript_path(conversation_id=args.conversation_id, transcript_path=args.transcript)
     if not t_path:

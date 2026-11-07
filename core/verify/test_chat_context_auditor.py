@@ -8,7 +8,12 @@ import sys
 sys.dont_write_bytecode = True
 
 import unittest
-from core.verify.chat_context_auditor import ChatContextAuditor, build_git_sha_manifest
+from core.verify.chat_context_auditor import (
+    ChatContextAuditor,
+    build_git_sha_manifest,
+    resolve_transcript_path,
+    scan_all_sessions
+)
 
 
 class TestChatContextAuditor(unittest.TestCase):
@@ -132,6 +137,19 @@ class TestChatContextAuditor(unittest.TestCase):
     def test_build_git_sha_manifest(self):
         manifest = build_git_sha_manifest()
         self.assertIsInstance(manifest, dict)
+
+    def test_resolve_transcript_path_strict_conversation_id(self):
+        """Якщо вказано неіснуючий conversation_id, резолвер повертає пустий рядок без витоку в чужу сесію."""
+        res = resolve_transcript_path(conversation_id="nonexistent_session_id_404")
+        self.assertEqual(res, "")
+
+    def test_scan_all_sessions_structure(self):
+        """scan_all_sessions() повертає список звітів без винятків."""
+        results = scan_all_sessions(recent_n=2)
+        self.assertIsInstance(results, list)
+        for r in results:
+            self.assertIn("status", r)
+            self.assertIn("conversation_id", r)
 
 
 if __name__ == "__main__":

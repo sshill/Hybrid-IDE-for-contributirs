@@ -935,6 +935,61 @@ class TestProvenanceSecurity(unittest.TestCase):
         timeout_short = calculate_ollama_timeout("qwen2.5-coder:1.5b", 10)
         self.assertGreaterEqual(timeout_short, 60)
 
+    def test_threading_httpserver_support(self):
+        """43. Анклав: перевірка використання ThreadingHTTPServer для неблокуючої багатопотокової обробки."""
+        from http.server import ThreadingHTTPServer
+        import core.enclave.enclave_daemon as ed
+        self.assertTrue(hasattr(ed, "ThreadingHTTPServer"))
+        self.assertEqual(ed.ThreadingHTTPServer, ThreadingHTTPServer)
+
+    def test_locked_ledger_multithread_stress(self):
+        """44. Провененс: стрес-тест locked_ledger() при 16 паралельних потоках із _LEDGER_THREAD_LOCK."""
+        import threading
+        num_threads = 16
+        errors = []
+
+        def worker(thread_idx):
+            try:
+                with locked_ledger() as ledger:
+                    passports = ledger.setdefault("passports", {})
+                    passports[f"stress_pass_{thread_idx}"] = {
+                        "passport_id": f"stress_pass_{thread_idx}",
+                        "status": "MINTED",
+                        "thread": thread_idx
+                    }
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(errors), 0, f"Thread errors: {errors}")
+        final_ledger = load_ledger()
+        for i in range(num_threads):
+            self.assertIn(f"stress_pass_{i}", final_ledger["passports"])
+
+    def test_circuit_breaker_session_isolation(self):
+        """45. Хуки: ізоляція Circuit Breaker між різними сесіями (Session Isolation)."""
+        from core.hooks.post_tool_hook import resolve_cb_file, read_fails, write_fails, reset as reset_cb
+        session_a = {"conversationId": "session_alpha_111", "artifactDirectoryPath": "/tmp/session_a"}
+        session_b = {"conversationId": "session_beta_222", "artifactDirectoryPath": "/tmp/session_b"}
+
+        cb_a = resolve_cb_file(session_a)
+        cb_b = resolve_cb_file(session_b)
+        self.assertNotEqual(cb_a, cb_b, "Circuit breaker paths must be strictly isolated per session")
+
+        # Запис збою в session_a не впливає на session_b
+        reset_cb(cb_a)
+        reset_cb(cb_b)
+        write_fails(2, cb_a)
+        self.assertEqual(read_fails(cb_a), 2)
+        self.assertEqual(read_fails(cb_b), 0)
+        reset_cb(cb_a)
+        reset_cb(cb_b)
+
 
 if __name__ == "__main__":
     unittest.main()

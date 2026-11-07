@@ -27,6 +27,13 @@ python3 core/verify/chat_context_auditor.py --conversation-id "<session_id>"
 python3 core/verify/chat_context_auditor.py --current-session
 ```
 
+Пакетний аудит усіх тредів / сесій (`/audit all` або `--scan-all`):
+```bash
+python3 core/verify/chat_context_auditor.py --scan-all
+```
+*(Аудит останніх N сесій: `python3 core/verify/chat_context_auditor.py --recent-sessions 5`)*
+
+
 ### Крок 2: Інтерпретація звіту та статус Git Confirmation Gate (Фаза 5)
 Аудитор детерміністично перевіряє 8 залізних гейтів:
 1. **Git-First Discovery Gate:** відсутність сліпих `list_dir`, `find_by_name`, `grep_search`.
