@@ -355,19 +355,30 @@ def direct_query_openrouter(prompt: str, model: str = "qwen/qwen-2.5-coder-32b-i
         return f"OPENROUTER_ERROR: {e}"
 
 
-def direct_query_gemini(prompt: str, model: str = "gemini-2.0-flash", max_tokens: int = 4096) -> str:
+def direct_query_gemini(prompt: str, model: str = "gemini-2.5-pro", max_tokens: int = 8192) -> str:
     """Нативний виклик Google Gemini API (Heavy-Context Arbiter 1M-2M токенів)."""
     _load_env_keys()
     api_key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
     if not api_key:
         if os.environ.get("OPENROUTER_API_KEY"):
-            or_model = "google/gemini-2.0-flash-001" if "flash" in model else "google/gemini-1.5-pro"
+            or_model = "google/gemini-2.5-flash" if "flash" in model else "google/gemini-2.5-pro"
             res = direct_query_openrouter(prompt, model=or_model)
             if not res.startswith("OPENROUTER_"):
                 return res
         return "GEMINI_KEY_MISSING"
 
     clean_model = model.replace("google/", "")
+    # Model aliasing for deprecated upstream IDs (Kernel v0.9.13)
+    if any(m in clean_model for m in ("1.5-pro", "2.5-pro", "gemini-pro")):
+        clean_model = "gemini-3.1-pro-preview"
+    elif any(m in clean_model for m in ("2.0-flash", "2.5-flash", "gemini-flash")):
+        clean_model = "gemini-3.8-flash"
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "HybridIDE-Enclave/0.9.13",
+        "x-goog-api-key": api_key
+    }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -376,13 +387,14 @@ def direct_query_gemini(prompt: str, model: str = "gemini-2.0-flash", max_tokens
             "maxOutputTokens": max_tokens
         }
     }
+    gem_timeout = int(os.environ.get("GEMINI_TIMEOUT", 180))
     try:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "HybridIDE-Enclave/0.9.12"}
+            headers=headers
         )
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=gem_timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             candidates = data.get("candidates", [])
             if candidates:
@@ -390,6 +402,13 @@ def direct_query_gemini(prompt: str, model: str = "gemini-2.0-flash", max_tokens
                 if parts:
                     return parts[0].get("text", "").strip()
             return "GEMINI_EMPTY_RESPONSE"
+    except urllib.error.HTTPError as he:
+        err_body = ""
+        try:
+            err_body = he.read().decode("utf-8")
+        except Exception:
+            pass
+        return f"GEMINI_ERROR: HTTP {he.code}: {err_body or he.reason}"
     except Exception as e:
         return f"GEMINI_ERROR: {e}"
 
@@ -504,7 +523,7 @@ def probe_provider_auth(provider_name: str = None) -> dict:
                         "auth_type": "GEMINI_API_KEY (Active)",
                         "latency_sec": lat,
                         "max_context": 2000000,
-                        "models": ["gemini-2.0-flash (1M tok)", "gemini-1.5-pro (2M tok)"]
+                        "models": ["gemini-2.5-pro (2M tok)", "gemini-3.8-flash (1M tok)"]
                     }
             except urllib.error.HTTPError as he:
                 status = "UNAUTHORIZED" if he.code in (401, 403) else ("QUOTA_EXHAUSTED" if he.code == 429 else f"HTTP_{he.code}")
@@ -563,12 +582,12 @@ def probe_provider_auth(provider_name: str = None) -> dict:
     if not provider_name or provider_name == "copilot":
         cop_bin = shutil.which("copilot")
         if not cop_bin:
-            results["copilot"] = {"status": "NOT_FOUND", "failover": "gemini-2.0-flash (1M tok)"}
+            results["copilot"] = {"status": "NOT_FOUND", "failover": "claude-3-5-sonnet (Tier 4 Arbiter)"}
         else:
             _, quota_err = direct_query_copilot("ping", mode="audit")
             results["copilot"] = {
                 "status": "READY" if not quota_err else "FAILOVER_TRIGGERED",
-                "failover": "gemini-2.0-flash (1M tok) -> claude-3-5-sonnet" if quota_err else "None"
+                "failover": "claude-3-5-sonnet (Tier 4 Arbiter)" if quota_err else "None"
             }
 
     # 7. Claude Sonnet Probe (Tier 4 Arbiter)
@@ -591,7 +610,8 @@ def probe_provider_auth(provider_name: str = None) -> dict:
 
 def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
     """
-    Host-First виклик GitHub Copilot CLI з виявленням вичерпання квоти (Failover Gate).
+    Host-First виклик GitHub Copilot CLI з виявленням вичерпання квоти (Failover Gate)
+    та захистом від апаратного ліміту ядра Linux MAX_ARG_STRLEN (128 KB).
     Повертає (output_text, is_quota_exceeded).
     """
     copilot_bin = shutil.which("copilot")
@@ -603,17 +623,46 @@ def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
     if not copilot_bin:
         return "COPILOT_NOT_FOUND", True
 
-    cmd = [copilot_bin, "-p", prompt]
+    prompt_bytes = len(prompt.encode("utf-8"))
+    temp_payload_file = None
+
+    # Захист від Linux MAX_ARG_STRLEN (128 KB): якщо prompt > 100 KB, передаємо через Brain-First файл
+    if prompt_bytes > 100_000:
+        sg_dir = os.path.join(PROJECT_ROOT, ".system_generated")
+        os.makedirs(sg_dir, exist_ok=True)
+        temp_payload_file = os.path.join(sg_dir, f"copilot_heavy_{int(time.time())}.tmp")
+        try:
+            with open(temp_payload_file, "w", encoding="utf-8") as f:
+                f.write(prompt)
+            cli_prompt = f"Execute deep architectural, contract, and syntax audit on the codebase payload located in: {temp_payload_file}. Return comprehensive analysis."
+        except Exception as e:
+            return f"COPILOT_FILE_ERROR: {e}", True
+    else:
+        cli_prompt = prompt
+
+    cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", cli_prompt]
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
         out = (proc.stdout or "").strip()
         err = (proc.stderr or "").strip()
         combined = f"{out}\n{err}".lower()
+        if "argument list too long" in combined or proc.returncode == 7:
+            return "COPILOT_ARG_TOO_LONG", True
         if proc.returncode != 0 or "exceeded monthly quota" in combined or "credit limit" in combined or "ai credits 0" in combined or "insufficient credits" in combined:
             return f"COPILOT_QUOTA_EXCEEDED: {out} {err}".strip(), True
         return out if out else err, False
+    except subprocess.TimeoutExpired:
+        return "COPILOT_TIMEOUT", True
     except Exception as e:
+        if "Argument list too long" in str(e):
+            return "COPILOT_ARG_TOO_LONG", True
         return f"COPILOT_ERROR: {e}", True
+    finally:
+        if temp_payload_file and os.path.exists(temp_payload_file):
+            try:
+                os.remove(temp_payload_file)
+            except Exception:
+                pass
 
 
 def resolve_telemetry_model(prompt: str = "", ram_available_override: float = None) -> tuple[str, int, str]:
@@ -660,16 +709,19 @@ def query_all_tier_ai(
     """
     _, diag_fns = _resolve_core_imports()
 
-    # 1. Tier 4.5 (Copilot CLI) з Failover Gate на Gemini (1M-2M токенів) та Tier 4 (Claude Sonnet)
+    # 0.5. Прямий виклик Google Gemini (1M–2M токенів Heavy-Context Arbiter)
+    if model and "gemini" in model.lower():
+        gem_out = direct_query_gemini(prompt, model=model)
+        if not gem_out.startswith("GEMINI_"):
+            return gem_out, model, 4.5
+        print(f"⚠️ [GEMINI ROUTING]: {model} returned {gem_out}. Falling back...", file=sys.stderr)
+
+    # 1. Tier 4.5 (Copilot CLI) з детермінованим Failover Gate на Tier 4 (Claude Sonnet Arbiter)
     if tier == 4.5 or model == "copilot-cli":
         cop_out, quota_exceeded = direct_query_copilot(prompt, mode=mode)
         if not quota_exceeded and not cop_out.startswith("COPILOT_"):
             return cop_out, "copilot-cli", 4.5
-        print("⚠️ [FAILOVER GATE]: Copilot CLI quota exceeded or offline. Initiating Heavy-Context Failover to Gemini 2.0 Flash (1M tok)...", file=sys.stderr)
-        gem_res = direct_query_gemini(prompt, model="gemini-2.0-flash")
-        if not gem_res.startswith("GEMINI_"):
-            return gem_res, "gemini-2.0-flash", 4.5
-        print("⚠️ [FAILOVER GATE]: Gemini fallback unavailable. Secondary routing to Tier 4 (Claude Sonnet)...", file=sys.stderr)
+        print(f"⚠️ [FAILOVER GATE]: Copilot CLI ({cop_out[:60]}). Direct failover to Tier 4 (Claude Sonnet Arbiter)...", file=sys.stderr)
         tier = 4
         model = "claude-3-5-sonnet-20241022"
 
@@ -1378,7 +1430,7 @@ def call_daemon_apply(payload: dict, host: str = DEFAULT_ENCLAVE_HOST, port: int
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Hybrid IDE Enclave Architecture Daemon & Client (v0.9.12)")
+    parser = argparse.ArgumentParser(description="Hybrid IDE Enclave Architecture Daemon & Client (v0.9.13)")
     parser.add_argument("--daemon", action="store_true", help="Запустити демон анклаву на loopback 127.0.0.1")
     parser.add_argument("--host", type=str, default=DEFAULT_ENCLAVE_HOST, help="Хост (за замовчуванням 127.0.0.1)")
     parser.add_argument("--port", type=int, default=DEFAULT_ENCLAVE_PORT, help="Порт (за замовчуванням 8765)")
@@ -1391,8 +1443,8 @@ def main():
     parser.add_argument("--patch-target", type=str, help="Вміст для заміни в файлі (для режиму patch)")
     parser.add_argument("--start-line", type=int, help="Початковий рядок заміни")
     parser.add_argument("--end-line", type=int, help="Кінцевий рядок заміни")
-    parser.add_argument("--allow-multiple", action="store_true", help="Дозволити множинну заміну")
     parser.add_argument("--query", type=str, help="Виконати аудит або запит через анклав")
+    parser.add_argument("--query-file", type=str, help="Виконати аудит або запит вмісту файлу через анклав")
     parser.add_argument("--help-tools", action="store_true", help="Вивести інструментальну схему анклаву")
     parser.add_argument("--battle-test", action="store_true", help="Запустити 4-Tier AI Battle Test")
     parser.add_argument("--telemetry", action="store_true", help="Вивести 2D-телеметрію контексту")
@@ -1432,8 +1484,15 @@ def main():
                     print(f"    ↳ models: {', '.join(p_info['models'])}")
         return 0
 
-    if args.query:
-        res = enclave_query(args.query, tier=args.tier or 1, model=args.model, mode=args.mode)
+    if args.query or args.query_file:
+        query_text = args.query
+        if args.query_file:
+            if not os.path.isfile(args.query_file):
+                print(f"❌ [QUERY FILE ERROR]: File not found: {args.query_file}", file=sys.stderr)
+                return 1
+            with open(args.query_file, "r", encoding="utf-8", errors="replace") as qf:
+                query_text = qf.read()
+        res = enclave_query(query_text, tier=args.tier or 1, model=args.model, mode=args.mode)
         if args.json_output:
             print(json.dumps(res, indent=2))
         else:

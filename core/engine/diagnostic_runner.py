@@ -579,7 +579,22 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
     if not output_text:
         copilot_bin = shutil.which("copilot") or os.path.expanduser("~/.local/bin/copilot")
         if os.path.exists(copilot_bin) or shutil.which("copilot"):
-            cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", target_prompt]
+            prompt_bytes = len(target_prompt.encode("utf-8"))
+            temp_file = None
+            if prompt_bytes > 100_000:
+                sg_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".system_generated")
+                os.makedirs(sg_dir, exist_ok=True)
+                temp_file = os.path.join(sg_dir, f"claude_copilot_heavy_{int(time.time())}.tmp")
+                try:
+                    with open(temp_file, "w", encoding="utf-8") as f_tmp:
+                        f_tmp.write(target_prompt)
+                    cli_p = f"Execute deep architectural, contract, and code audit for the project payload located in: {temp_file}. Output full detailed report."
+                except Exception:
+                    cli_p = target_prompt
+            else:
+                cli_p = target_prompt
+
+            cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", cli_p]
             if extra_args:
                 cmd.extend(extra_args)
             try:
@@ -592,6 +607,12 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
                     provider_used = "GitHub Copilot CLI (Fallback)"
             except Exception as e:
                 print(f"⚠️ Copilot CLI fallback помилка: {e}", file=sys.stderr)
+            finally:
+                if temp_file and os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except Exception:
+                        pass
 
     elapsed = round(time.time() - start_time, 2)
     if output_text:
@@ -624,7 +645,22 @@ def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = No
     else:
         target_prompt = prompt
 
-    full_cmd = base_cmd + ["-p", target_prompt]
+    prompt_bytes = len(target_prompt.encode("utf-8"))
+    temp_file = None
+    if prompt_bytes > 100_000:
+        sg_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".system_generated")
+        os.makedirs(sg_dir, exist_ok=True)
+        temp_file = os.path.join(sg_dir, f"copilot_engine_heavy_{int(time.time())}.tmp")
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f_tmp:
+                f_tmp.write(target_prompt)
+            cli_p = f"Execute deep architectural, contract, and code audit for the project payload located in: {temp_file}. Output full detailed report."
+        except Exception:
+            cli_p = target_prompt
+    else:
+        cli_p = target_prompt
+
+    full_cmd = base_cmd + ["-p", cli_p]
     if extra_args:
         full_cmd.extend(extra_args)
 
@@ -651,6 +687,12 @@ def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = No
     except Exception as e:
         print(f"❌ Помилка виклику Copilot CLI: {e}", file=sys.stderr)
         return f"ERROR: {e}"
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
 
 def check_semantic_constraints(response_text: str, max_words: int = None, required_keys: list = None) -> dict:
     """Програмна перевірка відповідей моделей на кількісні та структурні обмеження (Policy v0.9.7)."""
