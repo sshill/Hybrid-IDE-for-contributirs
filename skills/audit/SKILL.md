@@ -2,12 +2,12 @@
 name: audit
 description: >-
   Audits the current or specified session transcript for strict compliance with
-  Hybrid IDE General Execution Policy (Kernel v0.9.12), detects any Phase 1-5 violations,
+  Hybrid IDE General Execution Policy (Kernel v0.9.13), detects any Phase 1-5 violations,
   and verifies Git Confirmation Gate status via chat_context_auditor.py.
   Triggered by /audit [session_id] or /audit.
 ---
 
-# 🛡️ Аудит контексту чату на порушення регламенту (/audit) (Kernel v0.9.12)
+# 🛡️ Аудит контексту чату на порушення регламенту (/audit) (Kernel v0.9.13)
 
 Ця навичка активується, коли користувач вводить `/audit [session_id]` або `/audit`, просить «перевірити чат на порушення», «провести аудит контексту сесії» або зафіксувати статус перед підтвердженням на Git.
 

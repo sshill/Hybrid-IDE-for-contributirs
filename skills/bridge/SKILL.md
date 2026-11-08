@@ -2,19 +2,19 @@
 name: bridge
 description: >-
   Generates a canonical Bridge Prompt to transition context to a new chat
-  under Hybrid IDE Kernel v0.9.12, enforcing the Trusted Enclave Battle Test,
+  under Hybrid IDE Kernel v0.9.13, enforcing the Trusted Enclave Battle Test,
   complete Tool Catalog & Satellite Interfaces, Anchored Instrumental Requests,
   and domain overlay AGENTS.md binding. Invoked as /bridge [version].
 ---
 
-# 🌉 Bridge Prompt Generator (Hybrid IDE Kernel v0.9.12)
+# 🌉 Bridge Prompt Generator (Hybrid IDE Kernel v0.9.13)
 
 Використовуйте цю навичку щоразу, коли користувач вводить `/bridge` (з версією або без), при вичерпанні контексту (🔴 Зона 3: >800 кроків або >160k токенів) або для безшовного переходу в нову сесію без втрати прогресу, галюцинацій та повторного сканування кодової бази.
 
 ## Синтаксис виклику та версії
 
 - **`/bridge` (без аргументу):**
-  Автоматично застосовує актуальний Регламент **`v0.9.12`** та доменні оверлеї `AGENTS.md`.
+  Автоматично застосовує актуальний Регламент **`v0.9.13`** та доменні оверлеї `AGENTS.md`.
 - **`/bridge <версія>`:**
   Активує цільову версію відповідно до архівних маніфестів.
 
@@ -35,13 +35,13 @@ description: >-
    - Згенерувати канонічний Bridge Prompt та провести обов'язкову валідацію:
      `python3 ~/.gemini/config/plugins/hybrid-ide/bin/validate_migration_content.py --file <шлях_до_згенерованого_файлу>`.
 
-3. **Канонічний шаблон Bridge Prompt (Kernel v0.9.12):**
+3. **Канонічний шаблон Bridge Prompt (Kernel v0.9.13):**
 
 ````markdown
-# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.12)
+# 🌉 Регламентний старт: 4-Tier аудит ШІ-матриці та інтеграція AGENTS.md (v0.9.13)
 
 ## 1. Метадані стану та середовища
-- **Версія Регламенту:** `v0.9.12` (Trusted Enclave Architecture, Multi-Tier AI Gateway, 2D-Telemetry, Phase 5.2 Git State Seal Gate)
+- **Версія Регламенту:** `v0.9.13` (Trusted Enclave Multi-Provider Gateway, Failover Cascade, MAX_ARG_STRLEN Bridge, Credential Isolation, 2D-Telemetry, Phase 5.2 Git State Seal Gate)
 - **Домен:** `<Назва домену>` (`<Повний шлях до робочого простору>`)
 - **Parent Conversation ID:** `<Поточний Conversation ID>`
 - **Active Git Branch:** `<Поточна гілка>` (коміт `<HEAD Commit SHA>`)
@@ -62,7 +62,7 @@ description: >-
 ### 🛑 Крок 2: Бойова перевірка ШІ-матриці через Довірений Анклав
 Виконати єдиною пакетною командою (`BypassSandbox: true`):
 `python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test`
-*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe. У корені репозиторію також доступно: `python3 core/enclave/enclave_daemon.py --battle-test`)*
+*(Перевіряє Tier 1 Ollama 1.5b, Tier 2 Groq 120b, Tier 4 Claude Sonnet 3.5 та Tier 4.5 Copilot CLI probe. Також: `python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --probe-providers` для зондування живих провайдерів; у корені репозиторію: `python3 core/enclave/enclave_daemon.py --battle-test`)*
 
 ### 🛑 Крок 3: Лог інтеграції плагіна та доменного оверлею
 Сформувати та вивести структурований звіт:
@@ -72,35 +72,38 @@ description: >-
 ======================================================================
 [Step 1: Global Plugin Discovery]
   - Шлях плагіна:   ~/.gemini/config/plugins/hybrid-ide/
-  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.12)
-  - Хуки безпеки:   hooks.json (PreToolUse OS Gates v0.9.12, PostToolUse Breaker, Stop)
+  - Маніфест:       plugin.json (v1.0.0, Kernel v0.9.13)
+  - Хуки безпеки:   hooks.json (PreToolUse OS Gates v0.9.13, PostToolUse Breaker, Stop)
   - Статус хуків:   🟢 Активно (єдиний глобальний обробник)
 
 [Step 2: Constitutional Kernel Audit]
-  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.12)
+  - Файл ядра:      rules/AGENTS.md (Kernel v0.9.13)
   - OS Hard Gates:  Zero Inline-Eval, Shell State Isolation, Cryptographic Hash Passports, In-Memory Simulation
   - Дисципліна:     5 обов'язкових фаз, Anchored Grounding Gate, Anti-Echo Protocol
 
 [Step 3: Domain Overlay Resolution & Core Policies]
   - Файл оверлею:   <project_root>/AGENTS.md
-  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (40 unit + 10 auditor + 37/37)
+  - 5 фаз Анклаву:  1.Діагностика (телеметрія) -> 2.План -> 2.5.Pre-Approval (Claude Sonnet / Attest) -> 3.Схвалення (+/++) -> 4.1.Context Assembly -> 4.2.Pre-Check (Sonnet) -> 4.3.Синтез Анклавом (FrugalGPT Ollama 1.5b/3b/7b, Groq 120B overflow, Anti-Echo, HMAC Schema 1.2) -> 4.4.AST & Compile Gate -> 4.5.Pre-Release Arbiter (Copilot CLI -> Failover на Claude Sonnet) -> 5.Верифікація (45 unit + 12 auditor + 37/37)
   - Двогейтовий суверенітет: '+' для локальних змін/коміту; '++' для релізу/пушу
   - Zero-SHA:       Антігравіті суворо заборонено самостійно обчислювати хеші чи випускати паспорти
 
 [Step 3.1: Tool Catalog & Satellite Interfaces]
   - Головні інструменти Анклаву (~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py, локально core/enclave/enclave_daemon.py):
     * POST /apply (--target, --task | --direct-code) — атомарний синтез/патч
-    * POST /query (--query) — суверенний мульти-Tier ШІ-шлюз (FrugalGPT & Failover)
+    * POST /query (--query) — суверенний мульти-Tier ШІ-шлюз (FrugalGPT & Failover: 7 провайдерів)
     * GET /battle-test (--battle-test) — бойовий 4-Tier тест
+    * GET /probe-providers (--probe-providers) — живе зондування автентифікації API
+    * POST /set-credential (--set-credential) — ізоляція секретів (chmod 0600)
     * GET /telemetry (--telemetry) — 2D-телеметрія сесії та RAM
     * GET /help (--help-tools) — схема та параметри контрактів
     * GET /verify-chain (--verify-chain) — верифікація ланцюга паспортів
     * POST /attest (--attest-arbiter) — атестаційний гейт Antigravity Pool
   - Супутні та зовнішні інтерфейси:
+    * Linux MAX_ARG_STRLEN Bridge: передача важких промптів через tmp-файли
     * LinkedIn Developer API: OAuth 2.0 у ~/.env (LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI)
     * Email & SMTP нотифікації: системні сповіщення та релізи
     * Контрактний довідник: ~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md (читання через view_file)
-    * Верифікатор: ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (40 unit + 10 auditor + 37/37 перевірок)
+    * Верифікатор: ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (45 unit + 12 auditor + 37/37 перевірок)
 
 [Step 3.2: Anchored Instrumental Requests Protocol]
   - Обов'язкова звірка з ENCLAVE_INTERFACE.md або --help-tools перед запитом

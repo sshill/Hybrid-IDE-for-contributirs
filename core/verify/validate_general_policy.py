@@ -77,7 +77,7 @@ def verify_structure(content: str) -> dict:
         ("Phase 1 Status Banner", ("Phase 1 Status Banner",)),
         ("Git-First Discovery", ("Git & Index First",)),
         ("Exploration Hard Limit", ("Exploration Hard Limit", "Check 0", "сліпий обхід")),
-        ("Версія регламенту v0.8/v0.9", ("Architecture (v0.", "v0.9.8", "v0.9.7", "v0.9.6", "v0.9.5", "v0.9.4", "v0.9")),
+        ("Версія регламенту v0.8/v0.9", ("Architecture (v0.", "v0.9.13", "v0.9.12", "v0.9.11", "v0.9.10", "v0.9.9", "v0.9.8", "v0.9.7", "v0.9.6", "v0.9.5", "v0.9.4", "v0.9")),
         ("Централізований хаб Antigravity_Mgr", ("Antigravity_Mgr",)),
         ("Multi-Project Symlink Mesh", ("Symlink Mesh",)),
         ("Сесійний реєстр провененсу", ("сесійному реєстрі провененсу", "реєстрі провененсу", "SLSA-хеш", "SLSA")),
@@ -88,7 +88,14 @@ def verify_structure(content: str) -> dict:
         ("3-компонентна формула Bridge Prompt", ("канонічною 3-компонентною формулою", "канонічна 3-компонентна формула", "3-компонентна формула")),
         ("Repository Docs Hygiene Gate v0.9.3", ("Repository Docs Hygiene Gate (v0.9.3)", "Repository Docs Hygiene Gate", "Repository Docs Hygiene")),
         ("Dynamic Plan-Aware Metric & Semantic Loop Gate v0.9.4", ("Dynamic Plan-Aware Metric & Semantic Loop Gate (v0.9.4)", "Dynamic Plan-Aware Step Budget", "Semantic Loop Gate")),
-        ("Copilot Heavy-Only Escalation Gate v0.9.4", ("Copilot Heavy-Only Escalation Gate", "Шлюз важкої ескалації Copilot", "copilot_heavy_only_escalation_gate"))
+        ("Copilot Heavy-Only Escalation Gate v0.9.4", ("Copilot Heavy-Only Escalation Gate", "Шлюз важкої ескалації Copilot", "copilot_heavy_only_escalation_gate")),
+        ("Strict Hash Integrity & locked_ledger v0.9.8", ("locked_ledger", "Strict Hash Integrity", "HMAC-SHA256")),
+        ("Brain-First State Isolation & PreInvocation Hook v0.9.9", ("Brain-First", "pre_invocation_hook", "PreInvocation")),
+        ("In-Memory Simulation & Shell State Protection v0.9.10", ("simulate_replacement", "Shell State Isolation", "Shell State Protection")),
+        ("Trusted Enclave Sidecar & HMAC Schema 1.2 v0.9.11", ("enclave_daemon", "Довірений Анклав", "Schema 1.2", "HMAC Schema 1.2")),
+        ("Git State Seal Gate & Chat Context Auditor v0.9.12", ("Git State Seal Gate", "chat_context_auditor", "Zero-Omission")),
+        ("Multi-Provider AI Gateway & Linux MAX_ARG_STRLEN Bridge v0.9.13", ("MAX_ARG_STRLEN", "Multi-Provider", "мульти-Tier ШІ-шлюз")),
+        ("Live Auth Probing & Credential Isolation Gate v0.9.13", ("--probe-providers", "probe-providers", "Credential Isolation", "--set-credential"))
     ]
 
     all_passed = True
@@ -137,7 +144,7 @@ def main():
         sys.exit(0 if struct_result["status"] == "PASS" else 1)
 
     print("\n" + "=" * 55)
-    print("🔍 Аудит Генеральної політики v0.8: GEMINI.md")
+    print("🔍 Аудит Генеральної політики: Kernel v0.9.13")
     print(f"📄 Цільовий файл: {args.policy}")
     print("=" * 55)
     
@@ -151,7 +158,7 @@ def main():
 
     print(f"\n⏱️ Час валідації: {elapsed} с\n")
     if passed_count == total_count:
-        print("✅ Політика GEMINI.md v0.8 повністю валідна та відповідає регламенту!")
+        print("✅ Політика повністю валідна та відповідає регламенту Kernel v0.9.13!")
         sys.exit(0)
     else:
         print("❌ Виявлено невідповідності в структурі політики.")

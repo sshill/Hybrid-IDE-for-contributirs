@@ -64,7 +64,66 @@ def file_sha256(p: Path) -> str:
     return h.hexdigest()
 
 
-def sync(dry_run: bool = False):
+def audit_skills() -> tuple[bool, list[dict]]:
+    """
+    Детерміністичний аудит цілісності навичок (skills) між репозиторієм та системними каталогами.
+    Повертає (is_synced: bool, desync_items: list[dict]).
+    """
+    desync_items = []
+    for s_target_dir in SKILL_TARGET_DIRS:
+        if not s_target_dir.parent.exists() and "plugins" not in str(s_target_dir):
+            continue
+        for skill_name in WHITELISTED_SKILLS:
+            src_skill = REPO_ROOT / "skills" / skill_name / "SKILL.md"
+            if not src_skill.exists():
+                continue
+            dst_skill = s_target_dir / skill_name / "SKILL.md"
+            src_hash = file_sha256(src_skill)
+            if not dst_skill.exists():
+                desync_items.append({
+                    "skill": skill_name,
+                    "target_path": str(dst_skill),
+                    "status": "MISSING",
+                    "src_hash": src_hash,
+                    "dst_hash": None,
+                })
+            else:
+                dst_hash = file_sha256(dst_skill)
+                if src_hash != dst_hash:
+                    desync_items.append({
+                        "skill": skill_name,
+                        "target_path": str(dst_skill),
+                        "status": "OUT_OF_SYNC",
+                        "src_hash": src_hash,
+                        "dst_hash": dst_hash,
+                    })
+    return len(desync_items) == 0, desync_items
+
+
+def print_desync_report(desync_items: list[dict]):
+    """Форматування та вивід публічного звіту про розсинхронізацію навичок."""
+    print("\n" + "=" * 70)
+    print("🚨 [SKILLS DESYNCHRONIZATION REPORT]")
+    print("=" * 70)
+    for it in desync_items:
+        stat_icon = "⚠️ ВІДСУТНІЙ" if it["status"] == "MISSING" else "🔄 РОЗСИНХРОН"
+        dst_h = it["dst_hash"][:8] if it["dst_hash"] else "N/A"
+        print(f"  • {stat_icon}: {it['skill']}")
+        print(f"    ↳ Цільовий шлях: {it['target_path']}")
+        print(f"    ↳ Хеш (Repo):   {it['src_hash'][:8]}... | Хеш (Host): {dst_h}...")
+    print("=" * 70 + "\n")
+
+
+def sync(dry_run: bool = False, audit_only: bool = False):
+    is_synced, desync_items = audit_skills()
+    if not is_synced:
+        print_desync_report(desync_items)
+    else:
+        print("🟢 [SKILLS AUDIT PASS]: Всі навички (skills) 100% синхронізовані з хостом.")
+
+    if audit_only:
+        return 0 if is_synced else 1
+
     print(f"🔄 Початок синхронізації інструментів ядра Hybrid-IDE Kernel v0.9.13{' (DRY-RUN)' if dry_run else ''}...")
     synced_count = 0
 
@@ -130,8 +189,9 @@ def sync(dry_run: bool = False):
 def main():
     parser = argparse.ArgumentParser(description="Core tools and skills synchronizer (Kernel v0.9.13)")
     parser.add_argument("--dry-run", action="store_true", help="Simulate sync without modifying disk")
+    parser.add_argument("--audit-skills", action="store_true", help="Audit skills synchronization status and report desync without modifying disk")
     args = parser.parse_args()
-    return sync(dry_run=args.dry_run)
+    return sync(dry_run=args.dry_run, audit_only=args.audit_skills)
 
 
 if __name__ == "__main__":

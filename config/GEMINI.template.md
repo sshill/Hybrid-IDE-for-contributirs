@@ -227,3 +227,14 @@ $$A_******bigl(25,\; 4\,N_{\text{files}} + 2\,N_****** + 10\bigr)$$
 2. **Незмінність бар'єрів:** оверлей може додавати правила рушія чи середовища. Він не може послаблювати 5 фаз циклу, залізні шлюзи `pre_tool_hook.py` (§6.2), Git-First Local Access, Heavy-Only Gate (§8.4) та апаратний ценз 16 ГБ RAM.
 
 ---
+
+## 10. Еволюція залізних гейтів (Kernel v0.9.8 – v0.9.13)
+- **10.1 Strict Hash Integrity & locked_ledger (v0.9.8):** HMAC-SHA256, `locked_ledger()`
+- **10.2 Brain-First State Isolation & PreInvocation Hook (v0.9.9):** Brain-First, `pre_invocation_hook`
+- **10.3 In-Memory Simulation & Shell State Protection (v0.9.10):** `simulate_replacement`, Shell State Isolation
+- **10.4 Trusted Enclave HTTP Sidecar & HMAC Schema 1.2 (v0.9.11):** Довірений Анклав, `enclave_daemon.py`, Schema 1.2
+- **10.5 Git State Seal Gate & Chat Context Auditor (v0.9.12):** Git State Seal Gate, `chat_context_auditor.py`, Zero-Omission
+- **10.6 Multi-Provider AI Gateway & Linux MAX_ARG_STRLEN Bridge (v0.9.13):** мульти-Tier ШІ-шлюз (7 провайдерів), MAX_ARG_STRLEN
+- **10.7 Live Auth Probing & Credential Isolation Gate (v0.9.13):** `probe-providers`, Credential Isolation (`--set-credential`)
+
+---
