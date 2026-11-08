@@ -1,4 +1,4 @@
-# 📜 Історія версій та архітектурна еволюція Hybrid IDE (Kernel v0.8.3 – v0.9.12)
+# 📜 Історія версій та архітектурна еволюція Hybrid IDE (Kernel v0.8.3 – v0.9.13)
 
 Цей документ фіксує хронологію розвитку відкритого фреймворку **Hybrid Agentic IDE**, архітектурні вимоги кожної версії, передумови оновлень (реальні виробничі інциденти) та впроваджені детерміністичні механізми захисту (OS Hard Gates).
 
@@ -23,6 +23,7 @@
 | **v0.9.10** | Жовтень 2026 | Форензік-посилення | In-Memory Simulation, ліквідація --register CLI, Shell State Protection |
 | **v0.9.11** | Жовтень 2026 | Довірений Анклав (Trusted Enclave) | HTTP Sidecar daemon (127.0.0.1:8765), HMAC Schema 1.2, Anti-Echo Gate |
 | **v0.9.12** | Листопад 2026 | Запечатування Git та аудит чату | Git State Seal Gate, єдиний chat_context_auditor.py, Zero-Omission телеметрія |
+| **v0.9.13** | Листопад 2026 | Мульти-провайдерний шлюз та Linux Bridge | Live Auth Probing (--probe-providers), Linux MAX_ARG_STRLEN Bridge, Credential Isolation (0600) |
 
 ---
 
@@ -85,4 +86,16 @@
   4. Mandatory Proactive Telemetry Gate (Zero-Omission): виміряний віджет 2D-телеметрії у блоці коду `text` у Фазах 1, 3, 5.
   5. Багатопотокова надійність Анклаву (`ThreadPoolExecutor`).
 - **Тестове покриття:** 45 unit-тестів провененсу + 12 unit-тестів аудитора + 37/37 перевірок політики.
+
+### 🏛️ v0.9.13: Мульти-провайдерний шлюз, Heavy Payload Bridge та Credential Isolation
+- **Виклик:** Системний ліміт ядра Linux `MAX_ARG_STRLEN` (128 KB) при виклику Copilot CLI для великих diffs; вичерпання квот без швидкого фейловера; ризик витоку ключів з оточення.
+- **Вимоги:**
+  1. Мульти-провайдерний шлюз Анклаву: розширення до 7 провайдерів (Ollama, Groq, Gemini, Claude, OpenAI, OpenRouter, Copilot).
+  2. Linux Heavy Payload Bridge: файловий міст через `<brain>/.system_generated/` при розмірі промпту $>100\text{ KB}$ з атомарним очищенням у `finally`.
+  3. Live Provider Probing: протокол зондування `--probe-providers` та endpoint `GET /probe-providers` для перевірки авторизації, підписок та квот.
+  4. Credential Isolation Gate: збереження API-ключів у `~/.env` з правами доступу `0600` через `--set-credential`.
+  5. Оптимізований каскадний фейловер Tier 4.5: автоматичний перехід на Claude Sonnet Arbiter та Gemini 2.0 Flash / 1.5 Pro (до 2M токенів) при вичерпанні лімітів Copilot.
+  6. Розширення Schema 1.2 Allowlist: HMAC-SHA256 паспорти для нових сімейств моделей (Qwen 14B/32B, DeepSeek-R1, OpenAI o1/o3-mini, Gemini 2.0).
+- **Тестове покриття:** 45 unit-тестів провененсу + 12 unit-тестів аудитора чату + 37/37 перевірок політики + 4-Tier Battle Test PASS.
+
 

@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="#"><img src="https://img.shields.io/badge/kernel-v0.9.12-blue.svg" alt="Kernel v0.9.12"></a>
+  <a href="#"><img src="https://img.shields.io/badge/kernel-v0.9.13-blue.svg" alt="Kernel v0.9.13"></a>
   <a href="#"><img src="https://img.shields.io/badge/security_tests-45%2F45%20PASS-brightgreen.svg" alt="Security Tests 45/45 PASS"></a>
   <a href="#"><img src="https://img.shields.io/badge/policy_tests-37%2F37%20PASS-brightgreen.svg" alt="Policy Tests 37/37"></a>
   <a href="PoC/"><img src="https://img.shields.io/badge/SEI%2FTOGAF%20Maturity-93.3%25%20(Tier%204%20Verified)-success.svg" alt="Architectural Maturity 93.3%"></a>
@@ -274,14 +274,14 @@ cd ../..
 
 ---
 
-## 8. 📜 Історія версій та архітектурна еволюція (v0.8.3 – v0.9.12)
+## 8. 📜 Історія версій та архітектурна еволюція (v0.8.3 – v0.9.13)
 
-Фреймворк пройшов еволюцію від початкових 34 правил політики v0.8.3 до суверенної архітектури Довіреного Анклаву та детерміністичних OS Hard Gates у Kernel v0.9.12:
+Фреймворк пройшов еволюцію від початкових 34 правил політики v0.8.3 до суверенної архітектури Довіреного Анклаву та детерміністичних OS Hard Gates у Kernel v0.9.13:
 - **v0.8.3 – v0.9.3:** 5 фаз, ценз 16 ГБ RAM, Hard Deny `ls`/`dir`, Zero Inline-Eval, RouteLLM SLA (30 с), Dual Git, Правило 2 файлів.
 - **v0.9.4 – v0.9.7:** Dynamic Step Budget, Semantic Loop Gate (W=4), ліміт ядра $\le 20,480$ байтів (v0.9.5), декуплинг `AGENTS.md`, Copilot CLI (Tier 4.5).
 - **v0.9.8 – v0.9.10:** Brain-First ізоляція (`.system_generated/`), PreInvocation Hook, In-Memory Simulation, Shell State Protection.
-- **v0.9.11:** Довірений Анклав (`127.0.0.1:8765`), HMAC-SHA256 паспорти Schema 1.2, Anti-Echo Gate ($\le 0.25$).
-- **v0.9.12 (Поточний Kernel):** Git State Seal Gate, єдиний аудитор чату (`chat_context_auditor.py`), Step Budget Diagnostic Immunity, Zero-Omission телеметрія (45 unit + 12 auditor + 37/37 правил PASS).
+- **v0.9.11 – v0.9.12:** Довірений Анклав (`127.0.0.1:8765`), HMAC-SHA256 Schema 1.2, Git State Seal Gate, єдиний аудитор чату (`chat_context_auditor.py`).
+- **v0.9.13 (Поточний Kernel):** Мульти-провайдерний шлюз (7 провайдерів), Linux `MAX_ARG_STRLEN` Heavy Payload Bridge, Live Auth Probing (`--probe-providers`), Credential Isolation (`~/.env` 0600), розширення Schema 1.2 Allowlist (45 unit + 12 auditor + 37/37 правил PASS).
 
 👉 Повний хронологічний звіт див. у **[`docs/architecture/version_history.md`](docs/architecture/version_history.md)**.
 
@@ -552,14 +552,14 @@ The core framework architecture is completely decoupled from domain-specific imp
 
 ---
 
-## 8. 📜 Version History & Architectural Evolution (v0.8.3 – v0.9.12)
+## 8. 📜 Version History & Architectural Evolution (v0.8.3 – v0.9.13)
 
-The framework evolved from the 34 policy rules in v0.8.3 to the Trusted Enclave and deterministic OS Hard Gates in Kernel v0.9.12:
+The framework evolved from the 34 policy rules in v0.8.3 to the Trusted Enclave and deterministic OS Hard Gates in Kernel v0.9.13:
 - **v0.8.3 – v0.9.3:** 5 phases, 16 GB RAM census, Hard Deny `ls`/`dir`, Zero Inline-Eval, RouteLLM SLA (30s), Dual Git, Rule of Two files.
 - **v0.9.4 – v0.9.7:** Dynamic Step Budget, Semantic Loop Gate (W=4), kernel limit $\le 20,480$ B (v0.9.5), decoupled `AGENTS.md`, Copilot CLI (Tier 4.5).
 - **v0.9.8 – v0.9.10:** Brain-First isolation (`.system_generated/`), PreInvocation Hook, In-Memory Simulation, Shell State Isolation.
-- **v0.9.11:** Trusted Enclave (`127.0.0.1:8765`), HMAC-SHA256 Schema 1.2, Anti-Echo Gate ($\le 0.25$).
-- **v0.9.12 (Active Kernel):** Phase 5.2 Git State Seal Gate, unified chat auditor, Step Budget Diagnostic Immunity, Zero-Omission telemetry (45 unit + 12 auditor + 37/37 policy PASS).
+- **v0.9.11 – v0.9.12:** Trusted Enclave (`127.0.0.1:8765`), HMAC-SHA256 Schema 1.2, Git State Seal Gate, unified chat auditor.
+- **v0.9.13 (Active Kernel):** Multi-provider AI gateway (7 providers), Linux `MAX_ARG_STRLEN` Heavy Payload Bridge, Live Auth Probing (`--probe-providers`), Credential Isolation (`~/.env` 0600), Schema 1.2 Allowlist expansion (45 unit + 12 auditor + 37/37 policy PASS).
 
 👉 Full chronology: **[`docs/architecture/version_history.md`](docs/architecture/version_history.md)**.
 

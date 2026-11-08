@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# build_dist.sh — Hybrid IDE Distribution Package Builder (v0.9.12)
+# build_dist.sh — Hybrid IDE Distribution Package Builder (v0.9.13)
 # ==============================================================================
 set -euo pipefail
 

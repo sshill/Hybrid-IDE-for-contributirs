@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-build_distribution.py — Hybrid IDE Kernel v0.9.12 Distribution Package Builder
+build_distribution.py — Hybrid IDE Kernel v0.9.13 Distribution Package Builder
 Constructs an isolated, zero-credential distribution package for clean install
 on Debian 13 (Trixie) and Linux environments (Python 3.10+ stdlib only).
 """
@@ -25,7 +25,7 @@ if PROJECT_ROOT not in sys.path:
 
 INSTALL_SH_CONTENT = """#!/usr/bin/env bash
 # ==============================================================================
-# install.sh — Hybrid IDE Kernel v0.9.12 Standalone Installer for Debian 13 & Linux
+# install.sh — Hybrid IDE Kernel v0.9.13 Standalone Installer for Debian 13 & Linux
 # Safe, idempotent installation with automatic backup, non-root execution,
 # and zero external PyPI dependencies (Python 3.10+ stdlib only).
 # ==============================================================================
@@ -92,7 +92,7 @@ if [[ "${UNINSTALL}" == "true" ]]; then
 fi
 
 echo "======================================================================"
-echo "🚀 Hybrid IDE Kernel v0.9.12 Installer (Debian 13 / Linux)"
+echo "🚀 Hybrid IDE Kernel v0.9.13 Installer (Debian 13 / Linux)"
 echo "======================================================================"
 
 # Check prerequisites
@@ -276,7 +276,7 @@ echo "=== All Verification Checks Passed ==="
 """
 
 ENV_EXAMPLE_CONTENT = """# ==============================================================================
-# Hybrid IDE v0.9.12 Environment Configuration Template
+# Hybrid IDE v0.9.13 Environment Configuration Template
 # Place credentials in ~/.gemini/config/plugins/hybrid-ide/.env (chmod 600)
 # ==============================================================================
 
@@ -326,13 +326,13 @@ HOOKS_TEMPLATE_JSON = """{
 PLUGIN_JSON_CONTENT = """{
   "name": "hybrid-ide",
   "version": "1.0.0",
-  "description": "Hybrid IDE Framework Core & Constitutional Kernel v0.9.12",
+  "description": "Hybrid IDE Framework Core & Constitutional Kernel v0.9.13",
   "author": "Serhii Khylevych",
   "hooks": "hooks.json"
 }
 """
 
-README_MD_CONTENT = """# Hybrid IDE Distribution Package (v0.9.12)
+README_MD_CONTENT = """# Hybrid IDE Distribution Package (v0.9.13)
 
 Self-contained distribution package of the Hybrid IDE Constitutional Kernel and Orchestration Framework.
 Designed for Debian 13 (Trixie) and Linux environments with zero PyPI dependencies (Python 3.10+ stdlib only).
@@ -470,7 +470,7 @@ def build_package():
     root_sh_content = (
         "#!/usr/bin/env bash\\n"
         "# ==============================================================================\\n"
-        "# build_dist.sh — Hybrid IDE Distribution Package Builder (v0.9.12)\\n"
+        "# build_dist.sh — Hybrid IDE Distribution Package Builder (v0.9.13)\\n"
         "# ==============================================================================\\n"
         "set -euo pipefail\\n\\n"
         'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\\n'
@@ -488,7 +488,7 @@ def build_package():
             register_provenance(
                 root_build_sh,
                 model="openai/gpt-oss-120b",
-                source_prompt="Hybrid IDE v0.9.12 Distribution Package Builder wrapper"
+                source_prompt="Hybrid IDE v0.9.13 Distribution Package Builder wrapper"
             )
         except Exception as e:
             print(f"Notice: provenance registration exception: {e}")

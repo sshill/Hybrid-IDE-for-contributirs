@@ -1,4 +1,4 @@
-# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.12)
+# AGENTS.md — Hybrid IDE Core & Contributor Overlay (v0.9.13)
 
 Доповнює глобальне ядро Hybrid-IDE (`~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md`). Загальні 5 фаз та OS Hard Gates діють автоматично.
 
@@ -20,7 +20,7 @@
   * `core/verify/chat_context_auditor.py` — форензік-аудитор чату (Kernel v0.9.12) та Git State Seal Gate.
   * `core/verify/verify_remote_ci.py` — опитування GitHub Actions CI.
 
-## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.12)
+## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.13)
 1. **Фаза 1: Діагностика (Двоканальна)** — лише читання (Канал A: `git status -sb`, `git ls-files`, `view_file`, `enclave_daemon.py --telemetry`; Канал B: `search_web`, `read_url_content` після Absence Verification). Обов'язковий стартовий статус-банер сесії з виміряним віджетом 2D-телеметрії `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`.
 2. **Фаза 2: Репорт та план** — формування `implementation_plan.md` з обов'язковим віджетом індикатора контексту (`[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`) та AI Routing Matrix.
 3. **Фаза 2.5: Pre-Approval Gate (Tier 4 Claude Sonnet)** — аудит плану через Анклав (`enclave_daemon.py --query <plan> --tier 4 --mode audit` або Antigravity Pool Attestation Gate `POST /attest`).
