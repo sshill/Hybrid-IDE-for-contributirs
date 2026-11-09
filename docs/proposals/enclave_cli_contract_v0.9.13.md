@@ -140,3 +140,22 @@ This proposal does **not** authorize changing the plan approval gate, query
 success/verdict semantics, attestation behavior, context filtering, Git First
 hooks, or the architecture diagram. Those require separate designs and
 verification.
+
+## Patch batch
+
+The implementation patch and a Bash batch that applies it and runs the focused
+regression tests are stored alongside this proposal:
+
+- `docs/proposals/enclave_cli_contract_v0.9.13.patch`
+- `docs/proposals/apply_enclave_cli_contract_v0.9.13.sh`
+
+From the repository root, run:
+
+```bash
+bash docs/proposals/apply_enclave_cli_contract_v0.9.13.sh
+```
+
+The batch uses `git apply --check` before modifying files, recognizes an
+already-applied patch, compiles the changed Python files, then runs the focused
+CLI/HTTP tests. It does not commit or push changes. Review `git diff` and run
+the broader Phase 5 verification before committing.

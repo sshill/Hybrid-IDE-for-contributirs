@@ -1,0 +1,502 @@
+diff --git a/core/enclave/ENCLAVE_INTERFACE.md b/core/enclave/ENCLAVE_INTERFACE.md
+index d167aaf..4a5211a 100644
+--- a/core/enclave/ENCLAVE_INTERFACE.md
++++ b/core/enclave/ENCLAVE_INTERFACE.md
+@@ -1,63 +1,115 @@
+-# ENCLAVE_INTERFACE.md
+-**Hybrid IDE Enclave Architecture – v0.9.12**  
+-Reference guide for command‑line interface (CLI) options and HTTP service endpoints.
+-
+----
+-
+-## Table of Contents
+-1. [Architecture Overview](#architecture-overview)  
+-2. [Enclave Lifecycle – 5 Phases](#enclave-lifecycle---5-phases)  
+-3. [CLI Options](#cli-options)  
+-4. [HTTP Endpoints](#http-endpoints)  
+-5. [Example Invocations](#example-invocations)  
+-6. [Version & Compatibility](#version--compatibility)  
+-
+----
+-
+-## Architecture Overview
+-The Hybrid IDE Enclave isolates untrusted code execution while providing deterministic, auditable results. Interaction occurs through:
+-
+-* **CLI** – for local automation, CI pipelines, and developer tooling.  
+-* **HTTP API** – for remote orchestration, monitoring, and integration with external services.
+-
+-Both interfaces share a common **state machine** that progresses through five well‑defined phases.
+-
+----
+-
+-## Enclave Lifecycle – 5 Phases
+-| Phase | Symbolic Name | Trigger | Core Responsibilities | Typical Outputs |
+-|-------|---------------|---------|-----------------------|-----------------|
+-| **1** | **Initialize** | `enclave start` or HTTP `POST /apply` (first call) | • Load configuration<br>• Verify runtime dependencies<br>• Allocate secure memory | `init‑token`, environment snapshot |
+-| **2** | **Validate** | Automatic after Init | • Perform static analysis<br>• Run `--check-all` policies<br>• Verify cryptographic signatures | Validation report, `validation‑hash` |
+-| **3** | **Execute** | After successful Validate | • Run user‑provided payload in sandbox<br>• Emit telemetry (`--telemetry`)<br>• Optionally run battle‑test (`--battle-test`) | Execution log, result payload |
+-| **4** | **Attest** | After Execute (or on explicit request) | • Generate attestation evidence<br>• Sign with enclave key (`--attest-arbiter`)<br>• Build verification chain (`--verify-chain`) | Attestation bundle, `attestation‑token` |
+-| **5** | **Cleanup** | End of session or error | • Zero out memory<br>• Revoke temporary keys<br>• Emit final health status | `shutdown‑report` |
+-
+-> **Note:** Phases can be short‑circuited by failures; the enclave will transition directly to **Cleanup** while emitting error diagnostics.
+-
+----
+-
+-## CLI Options
+-| Option | Category | Description | Example |
+-|--------|----------|-------------|---------|
+-| `--battle-test` | Execution | Runs a deterministic “battle‑test” workload before the main payload to stress‑test resource limits. | `enclave run --battle-test` |
+-| `--telemetry` | Execution | Streams real‑time telemetry (CPU, memory, I/O) to stdout or a configured endpoint. | `enclave run --telemetry` |
+-| `--check-all` | Validation | Enables exhaustive static and dynamic checks (lint, dependency audit, policy compliance). | `enclave validate --check-all` |
+-| `--help-tools` | General | Prints extended help for auxiliary tools (`arbiter`, `verifier`, `monitor`). | `enclave --help-tools` |
+-| `--query <expr>` | Query | Executes a JMESPath‑compatible query against the enclave’s current state. | `enclave query --query "tasks[?status=='failed']"` |
+-| `--target <uri>` | General | Overrides the default enclave service URI (e.g., `http://localhost:8080`). | `enclave apply --target https://api.example.com/enclave` |
+-| `--attest-arbiter <verdict>` | Attestation | Реєстрація вердикту арбітра Antigravity Pool (PASS). | `enclave --attest-arbiter PASS` |
+-| `--probe-providers` | Diagnostics | Зонди авторизації/квот (Ollama, Groq, Gemini, OpenAI, OpenRouter, Copilot). | `enclave --probe-providers` |
+-| `--provider <name>` | Diagnostics | Опитування конкретного провайдера (`gemini`, `openai`, `ollama` тощо). | `enclave --probe-providers --provider gemini` |
+-| `--verify-chain` | Attestation | Верифікація ланцюга HMAC-паспортів у леджері. | `enclave --verify-chain` |
+-| `--help` | General | Стандартна довідка параметрів. | `enclave --help` |
+-
+-## HTTP Endpoints
+-- `GET /probe-providers` – діагностичні зонди авторизації та квот провайдерів ШІ.
+-- `GET /battle-test` – 4-Tier AI Battle Test (Ollama, Groq, Claude Sonnet, Copilot probe).
+-- `GET /telemetry` – 2D-телеметрія активної сесії.
+-- `GET /verify-chain` – детерміністична перевірка ланцюга HMAC-паспортів леджера.
+-- `POST /apply` – атомарний синтез/патч із первинним контролем та випуском паспорта.
+-- `POST /query` – суверенний шлюз ШІ з Failover (Copilot -> Gemini 1M/2M -> Claude).
+-- `POST /attest` – фіксація вердикту арбітра Antigravity Pool.
++# Контракт Довіреного Анклаву — v0.9.13
+ 
++Цей документ описує наявний інтерфейс `core/enclave/enclave_daemon.py`,
++а не гарантію виконання всіх фаз регламенту. `--help` показує CLI,
++`--help-tools` і `GET /help` повертають JSON-довідку HTTP. CLI не має
++підкоманд `enclave run`, `apply` або `query`.
++
++Демон запускається командою `python3 core/enclave/enclave_daemon.py --daemon`.
++Типова адреса — `127.0.0.1:8765`; `--host` і `--port` налаштовують її.
++HTTP не реалізує автентифікацію: не відкривайте його недовіреним клієнтам.
++Лише CLI `--target` делегує виклик доступному демону; інші CLI-операції
++виконуються локально. При помилці виклику демона `--target` повторює операцію
++локально; помилка відповіді не доводить, що демон не встиг змінити файл.
++
++## Застосування коду: CLI `--target`, HTTP `POST /apply`
++
++`--target` / `target_path` — шлях до **файлу**, не URL. `--task` /
++`task_prompt` — завдання для генерації; `--direct-code` / `direct_code` —
++готовий текст без звернення до моделі. При передачі обох використовується
++`direct_code`, а `task_prompt` також використовується для Anti-Echo.
++Без жодного з них операція повертає помилку.
++
++| CLI | JSON | Значення |
++|---|---|---|
++| `--target` | `target_path` | Цільовий файл; HTTP також приймає `target_file`. |
++| `--task` | `task_prompt` | Інструкція моделі; HTTP також приймає `task`. |
++| `--direct-code` | `direct_code` | Код або фрагмент для заміни. |
++| `--mode` | `mode` | Для `/apply`: `synthesize` (типово) або `patch`. |
++| `--tier`, `--model` | `tier`, `model` | Необов'язкові налаштування маршрутизації моделі. |
++| `--patch-target` | `patch_target` | Непорожній точний текст для заміни, обов'язковий у `patch`. |
++| `--start-line`, `--end-line` | `start_line`, `end_line` | Необов'язковий діапазон: обидва номери, від 1, включно. |
++| `--allow-multiple` | `allow_multiple` | Дозволити заміну **всіх** збігів у діапазоні або файлі; типово `false`. |
++| — | `session_id` | Необов'язковий ідентифікатор сесії для паспорта. |
++
++`synthesize` створює або перезаписує файл. `patch` потребує наявного файла
++та шукає точний текст у заданому діапазоні або у всьому файлі. Без
++`--allow-multiple` має бути рівно один збіг; за його відсутності або при
++неоднозначності запис не відбувається. Для Python виконуються AST-перевірка,
++симуляція і кроки паспорта перед атомарним записом. Помилка після запису,
++зокрема підтвердження паспорта, не гарантує відсутності змін у файлі.
++Завжди узгоджуйте ціль і вміст із затвердженим планом.
++
++Приклади для санкціонованих тестових файлів:
++
++```bash
++python3 core/enclave/enclave_daemon.py --target /tmp/example.py \
++  --direct-code 'print("hello")' --mode synthesize --json-output
++python3 core/enclave/enclave_daemon.py --target /tmp/example.py \
++  --mode patch --patch-target 'hello' --direct-code 'world' --json-output
++```
++
++Задавайте коректні номери рядків для конкретного файла. Якщо справді потрібна
++заміна кількох збігів, додайте `--allow-multiple` після перевірки діапазону.
++HTTP-еквівалент запиту:
++
++```http
++POST /apply
++Content-Type: application/json
++
++{"target_path":"/tmp/example.py","mode":"patch","patch_target":"hello","direct_code":"world","allow_multiple":false}
++```
++
++Успішний `/apply` повертає HTTP 200 та receipt зі `status: SUCCESS`, шляхом,
++хешами й `passport_id`; помилка застосування — HTTP 422 та `status: ERROR`.
++CLI з `--json-output` друкує receipt; код завершення 0 означає `SUCCESS`,
++1 — помилку.
++
++## Запити до моделі: CLI `--query` / `--query-file`, HTTP `POST /query`
++
++Це текстові промпти моделі, **не JMESPath**. `--query-file` читає UTF-8 файл
++як повний промпт, без автоматичного додавання інструкції аудиту; якщо
++вказано також `--query`, використовується файл. Формулюйте задачу й критерії
++перевірки у самому промпті. Не передавайте секрети.
++
++```bash
++python3 core/enclave/enclave_daemon.py \
++  --query 'Перевір наведений план на пропущені ризики: ...' \
++  --tier 4 --mode audit --json-output
++python3 core/enclave/enclave_daemon.py \
++  --query-file /tmp/audit-prompt.txt --tier 4 --mode precheck --json-output
++```
++
++```http
++POST /query
++Content-Type: application/json
++
++{"prompt":"Перевір наведений план на пропущені ризики: ...","tier":4,"mode":"audit"}
++```
++
++HTTP приймає `prompt`, `tier`, `model`, `mode`; типові значення — tier 1 і
++mode `query`. CLI має спільний `--mode` з типовим `synthesize`, тому для
++аудиту чи precheck задавайте `--mode` явно. HTTP повертає 200 для `SUCCESS`,
++422 для `ERROR`. CLI повертає 0 або 1 відповідно. `SUCCESS` означає лише,
++що результат не починається з `ERROR:`: це **не доказ проведеного аудиту,
++PASS чи незалежної перевірки**. Маршрутизація може повернути текст атестації
++за наявності старого прапорця; перевіряйте зміст і походження відповіді.
++
++## Інші операції
++
++| CLI | HTTP | Дія |
++|---|---|---|
++| `--help-tools` | `GET /help`, `/help-tools` | JSON-довідка. |
++| — | `GET /health` | Статус демона. |
++| `--telemetry` | `GET /telemetry` | Телеметрія; за відсутності даних можливі типові значення. |
++| `--battle-test` | `GET /battle-test` (`/battletest`) | Запити для перевірки провайдерів; потребують доступних сервісів. |
++| `--probe-providers [--provider NAME]` | `GET /probe-providers` (`/probe_providers`) | Зондування провайдерів; HTTP не приймає фільтр провайдера. |
++| `--check-all` | `GET /diagnostics` (`/check-all`) | Телеметрія і battle-test, не повний набір перевірок політики. |
++| `--verify-chain` | `GET /verify-chain` (`/verify_chain`) | Перевірка ланцюга паспортів. |
++| `--attest-arbiter [VERDICT]` | `POST /attest` | Запис прапорця атестації; не перевіряє самостійно поточний запит. |
++| `--set-credential KEY VALUE [--project ID]` | Немає | Запис облікових даних через CLI; значення в аргументах може бути видимим іншим процесам або в історії команд. |
++
++`--json-output` підтримується не всіма операціями; `--verify-chain` та
++`--check-all` і так виводять JSON. Для `POST /attest` поля `verdict` та
++`arbiter` необов'язкові. Атестація не прив'язана до хешу поточного запиту і
++не є доказом його незалежного аудиту.
+diff --git a/core/enclave/enclave_daemon.py b/core/enclave/enclave_daemon.py
+index 88776bc..f94bea0 100644
+--- a/core/enclave/enclave_daemon.py
++++ b/core/enclave/enclave_daemon.py
+@@ -16,6 +16,7 @@ Enclave Architecture (Trusted Sidecar / Privilege Separation Enclave Daemon)
+ 
+ import argparse
+ import ast
++import contextlib
+ import hashlib
+ import json
+ import os
+@@ -858,6 +859,16 @@ def enclave_apply(
+     9. Повернення структурованого JSON-receipt.
+     """
+     start_time = time.time()
++    if not isinstance(target_path, str) or not target_path.strip():
++        return {"status": "ERROR", "error": "target_path must be a non-empty file path"}
++    if not isinstance(allow_multiple, bool):
++        return {"status": "ERROR", "error": "allow_multiple must be a boolean"}
++    if mode == "patch" and ((start_line is None) != (end_line is None)):
++        return {"status": "ERROR", "error": "start_line and end_line must be provided together"}
++    if mode == "patch" and start_line is not None and (
++        type(start_line) is not int or type(end_line) is not int
++    ):
++        return {"status": "ERROR", "error": "start_line and end_line must be integers"}
+     prov_fns, diag_fns = _resolve_core_imports()
+ 
+     if not prov_fns:
+@@ -1248,21 +1259,22 @@ def get_tools_help() -> dict:
+     """Інструментальний контракт та схема Довіреного Анклаву для Antigravity (Zero-Dep stdlib)."""
+     return {
+         "framework": "Hybrid IDE Trusted Enclave",
+-        "version": "0.9.12",
++        "version": "0.9.13",
+         "endpoints": {
+             "POST /apply": {
+                 "description": "Атомарний запис/модифікація файлу з первинним контролем (Anti-Echo, AST, HMAC-паспорт).",
+                 "parameters": {
+                     "target_path": "string (обов'язковий) — шлях до цільового файлу",
+                     "mode": "string ('synthesize' | 'patch', default 'synthesize')",
+-                    "task_prompt": "string — завдання для моделі ШІ",
++                    "task_prompt": "string — завдання для моделі ШІ; CLI: --task",
+                     "direct_code": "string — готовий код для валідації та запису (без запиту до ШІ)",
+                     "tier": "number (1, 2, 4, 4.5)",
+                     "model": "string (назва моделі)",
+                     "patch_target": "string (для mode='patch') — точний рядок для заміни",
+-                    "start_line": "number (опціонально)",
+-                    "end_line": "number (опціонально)",
+-                    "allow_multiple": "boolean"
++                    "start_line": "integer (опціонально, 1-based inclusive; разом з end_line)",
++                    "end_line": "integer (опціонально, 1-based inclusive; разом з start_line)",
++                    "allow_multiple": "boolean (default false; CLI: --allow-multiple)",
++                    "session_id": "string (опціонально; лише HTTP)"
+                 }
+             },
+             "POST /query": {
+@@ -1271,13 +1283,16 @@ def get_tools_help() -> dict:
+                     "prompt": "string (обов'язковий) — текст промпту/завдання",
+                     "tier": "number (1, 2, 4, 4.5)",
+                     "model": "string (опціонально)",
+-                    "mode": "string ('query' | 'audit' | 'precheck')"
++                    "mode": "string (default 'query'; CLI default 'synthesize', для аудиту вказати --mode audit)"
+                 }
+             },
+             "GET /battle-test": "Запуск 4-Tier Battle Test (Ollama, Groq, Claude Sonnet, Copilot CLI probe).",
+             "GET /probe-providers": "Діагностичні зонди перевірки авторизації, підписок та квот провайдерів (Ollama, Groq, Gemini, OpenAI, OpenRouter, Copilot CLI).",
+             "GET /telemetry": "Зняття 2D-телеметрії сесії (кроки, Nin/Nout, зона здоров'я контексту).",
+             "GET /verify-chain": "Детерміністична верифікація ланцюга HMAC-паспортів у леджері.",
++            "GET /health": "Статус демона.",
++            "GET /help": "Ця інструментальна схема (також GET /help-tools).",
++            "GET /diagnostics": "Телеметрія та battle-test (також GET /check-all).",
+             "POST /attest": "Реєстрація вердикту арбітра від Antigravity Pool ({'verdict': 'PASS'})."
+         }
+     }
+@@ -1290,7 +1305,7 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
+         if self.path == "/health":
+             resp = {
+                 "status": "READY",
+-                "version": "0.9.12",
++                "version": "0.9.13",
+                 "enclave": "Trusted Sidecar",
+                 "tiers": [1, 2, 4, 4.5],
+                 "time": time.time()
+@@ -1308,7 +1323,7 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
+         elif self.path in ("/diagnostics", "/check-all"):
+             resp = {
+                 "status": "READY",
+-                "version": "0.9.12",
++                "version": "0.9.13",
+                 "telemetry": get_telemetry(),
+                 "battle_test": run_battle_test()
+             }
+@@ -1443,6 +1458,7 @@ def main():
+     parser.add_argument("--patch-target", type=str, help="Вміст для заміни в файлі (для режиму patch)")
+     parser.add_argument("--start-line", type=int, help="Початковий рядок заміни")
+     parser.add_argument("--end-line", type=int, help="Кінцевий рядок заміни")
++    parser.add_argument("--allow-multiple", action="store_true", help="Дозволити заміну всіх збігів у режимі patch (типово заборонено)")
+     parser.add_argument("--query", type=str, help="Виконати аудит або запит через анклав")
+     parser.add_argument("--query-file", type=str, help="Виконати аудит або запит вмісту файлу через анклав")
+     parser.add_argument("--help-tools", action="store_true", help="Вивести інструментальну схему анклаву")
+@@ -1526,7 +1542,7 @@ def main():
+     if args.check_all:
+         diag = {
+             "status": "READY",
+-            "version": "0.9.12",
++            "version": "0.9.13",
+             "telemetry": get_telemetry(),
+             "battle_test": run_battle_test()
+         }
+@@ -1557,15 +1573,17 @@ def main():
+             "allow_multiple": args.allow_multiple
+         }
+ 
+-        # Якщо активний локальний демон на 127.0.0.1, делегуємо через HTTP
+-        if is_daemon_running(host=args.host, port=args.port):
+-            try:
+-                receipt = call_daemon_apply(payload, host=args.host, port=args.port)
+-            except Exception as e:
+-                print(f"⚠️ Помилка виклику демона анклаву: {e}. Виконуємо in-process fallback...", file=sys.stderr)
++        # Залишаємо stdout придатним для JSON, не приховуючи повідомлення паспорта.
++        output_context = contextlib.redirect_stdout(sys.stderr) if args.json_output else contextlib.nullcontext()
++        with output_context:
++            if is_daemon_running(host=args.host, port=args.port):
++                try:
++                    receipt = call_daemon_apply(payload, host=args.host, port=args.port)
++                except Exception as e:
++                    print(f"⚠️ Помилка виклику демона анклаву: {e}. Виконуємо in-process fallback...", file=sys.stderr)
++                    receipt = enclave_apply(**payload)
++            else:
+                 receipt = enclave_apply(**payload)
+-        else:
+-            receipt = enclave_apply(**payload)
+ 
+         if args.json_output:
+             print(json.dumps(receipt, indent=2))
+diff --git a/core/verify/test_provenance_security.py b/core/verify/test_provenance_security.py
+index c959dac..191ed8e 100644
+--- a/core/verify/test_provenance_security.py
++++ b/core/verify/test_provenance_security.py
+@@ -7,14 +7,19 @@
+ """
+ 
+ import hashlib
++import contextlib
++import http.client
++import io
+ import json
+ import os
+ import shutil
+ import subprocess
+ import sys
+ import tempfile
++import threading
+ import time
+ import unittest
++from unittest import mock
+ 
+ sys.dont_write_bytecode = True
+ 
+@@ -872,7 +877,7 @@ class TestProvenanceSecurity(unittest.TestCase):
+     def test_enclave_tools_help_schema(self):
+         """39. Анклав: ендпоінт /help-tools повертає вичерпну схему інструментів для Antigravity."""
+         schema = get_tools_help()
+-        self.assertIn(schema.get("version"), ("0.9.11", "0.9.12"))
++        self.assertEqual(schema.get("version"), "0.9.13")
+         self.assertIn("endpoints", schema)
+         endpoints = schema.get("endpoints")
+         self.assertIn("POST /apply", endpoints)
+@@ -882,6 +887,150 @@ class TestProvenanceSecurity(unittest.TestCase):
+         self.assertIn("GET /verify-chain", endpoints)
+         self.assertIn("POST /attest", endpoints)
+ 
++    def test_enclave_cli_apply_contract(self):
++        import core.enclave.enclave_daemon as ed
++
++        prov, _ = ed._resolve_core_imports()
++        target = os.path.join(self.test_dir, "cli_target.py")
++        base = ["enclave_daemon.py", "--target", target, "--json-output"]
++
++        def run_cli(arguments):
++            output = io.StringIO()
++            with mock.patch.object(sys, "argv", base + arguments), contextlib.redirect_stdout(output):
++                result = ed.main()
++            return result, json.loads(output.getvalue())
++
++        with mock.patch.object(ed, "_resolve_core_imports", return_value=(prov, {})), \
++                mock.patch.object(ed, "is_daemon_running", return_value=False):
++            code, receipt = run_cli(["--direct-code", "value = 'old'\nother = 'old'\n"])
++            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
++            with open(target, encoding="utf-8") as f:
++                original = f.read()
++
++            patch_args = ["--mode", "patch", "--patch-target", "old", "--direct-code", "new"]
++            code, receipt = run_cli(patch_args)
++            self.assertEqual((code, receipt["status"]), (1, "ERROR"))
++            self.assertIn("occurs 2 times", receipt["error"])
++            with open(target, encoding="utf-8") as f:
++                self.assertEqual(f.read(), original)
++
++            code, receipt = run_cli(patch_args + ["--start-line", "1"])
++            self.assertEqual((code, receipt["status"]), (1, "ERROR"))
++            self.assertIn("provided together", receipt["error"])
++
++            lines = original.splitlines()
++            first_match = next(i for i, line in enumerate(lines, 1) if "old" in line)
++            code, receipt = run_cli(patch_args + ["--start-line", str(first_match),
++                                                  "--end-line", str(first_match)])
++            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
++            with open(target, encoding="utf-8") as f:
++                self.assertEqual(f.read().count("old"), 1)
++            with open(target, "w", encoding="utf-8") as f:
++                f.write(original)
++
++            code, receipt = run_cli(patch_args + ["--allow-multiple"])
++            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
++            with open(target, encoding="utf-8") as f:
++                self.assertEqual(f.read().count("new"), 2)
++
++    def test_enclave_cli_daemon_payload(self):
++        import core.enclave.enclave_daemon as ed
++
++        args = ["enclave_daemon.py", "--target", "example.py", "--mode", "patch",
++                "--patch-target", "old", "--direct-code", "new", "--allow-multiple",
++                "--json-output"]
++        with mock.patch.object(sys, "argv", args), \
++                mock.patch.object(ed, "is_daemon_running", return_value=True), \
++                mock.patch.object(ed, "call_daemon_apply", return_value={"status": "SUCCESS"}) as call, \
++                contextlib.redirect_stdout(io.StringIO()):
++            self.assertEqual(ed.main(), 0)
++        self.assertIs(call.call_args.args[0]["allow_multiple"], True)
++        self.assertEqual(call.call_args.args[0]["patch_target"], "old")
++
++    def test_enclave_cli_query_file_contract(self):
++        import core.enclave.enclave_daemon as ed
++
++        prompt_file = os.path.join(self.test_dir, "prompt.txt")
++        with open(prompt_file, "w", encoding="utf-8") as f:
++            f.write("Audit this plan.")
++        args = ["enclave_daemon.py", "--query", "ignored", "--query-file", prompt_file,
++                "--mode", "audit", "--tier", "4", "--json-output"]
++        response = {"status": "SUCCESS", "output": "answer"}
++        output = io.StringIO()
++        with mock.patch.object(sys, "argv", args), \
++                mock.patch.object(ed, "enclave_query", return_value=response) as query, \
++                contextlib.redirect_stdout(output):
++            self.assertEqual(ed.main(), 0)
++        query.assert_called_once_with("Audit this plan.", tier=4.0, model=None, mode="audit")
++        self.assertEqual(json.loads(output.getvalue()), response)
++
++    def test_enclave_http_apply_contract(self):
++        import core.enclave.enclave_daemon as ed
++
++        prov, _ = ed._resolve_core_imports()
++        target = os.path.join(self.test_dir, "http_target.py")
++        with open(target, "w", encoding="utf-8") as f:
++            f.write("first = 'old'\nsecond = 'old'\n")
++        server = ed.ThreadingHTTPServer(("127.0.0.1", 0), ed.EnclaveHTTPHandler)
++        thread = threading.Thread(target=server.serve_forever)
++        thread.start()
++
++        def post(payload):
++            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
++            try:
++                connection.request("POST", "/apply", json.dumps(payload),
++                                   {"Content-Type": "application/json"})
++                response = connection.getresponse()
++                return response.status, json.loads(response.read())
++            finally:
++                connection.close()
++
++        try:
++            with mock.patch.object(ed, "_resolve_core_imports", return_value=(prov, {})):
++                payload = {"target_path": target, "mode": "patch", "patch_target": "old",
++                           "direct_code": "new", "session_id": "http_test"}
++                status, receipt = post(payload)
++                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
++                with open(target, encoding="utf-8") as f:
++                    self.assertEqual(f.read(), "first = 'old'\nsecond = 'old'\n")
++
++                status, receipt = post({**payload, "allow_multiple": "false"})
++                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
++                self.assertIn("boolean", receipt["error"])
++
++                status, receipt = post({**payload, "start_line": 1})
++                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
++                self.assertIn("provided together", receipt["error"])
++
++                status, receipt = post({**payload, "start_line": "1", "end_line": 2})
++                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
++                self.assertIn("integers", receipt["error"])
++
++                status, receipt = post({**payload, "target_path": ""})
++                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
++                self.assertIn("target_path", receipt["error"])
++
++                status, receipt = post({**payload, "allow_multiple": True})
++                self.assertEqual((status, receipt["status"]), (200, "SUCCESS"))
++                with open(target, encoding="utf-8") as f:
++                    self.assertEqual(f.read(), "first = 'new'\nsecond = 'new'\n")
++
++                connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
++                try:
++                    connection.request("GET", "/help")
++                    response = connection.getresponse()
++                    self.assertEqual(response.status, 200)
++                    self.assertEqual(json.loads(response.read()), ed.get_tools_help())
++                    connection.request("GET", "/health")
++                    response = connection.getresponse()
++                    self.assertEqual(json.loads(response.read())["version"], "0.9.13")
++                finally:
++                    connection.close()
++        finally:
++            server.shutdown()
++            thread.join()
++            server.server_close()
++
+     def test_enclave_copilot_failover_gate(self):
+         """40. Анклав: відмовостійкість (Failover Gate) — перехід з Copilot CLI на Claude Sonnet при вичерпанні квоти."""
+         out, quota_err = direct_query_copilot("test prompt", mode="audit")
