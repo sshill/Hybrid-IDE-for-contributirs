@@ -7,14 +7,19 @@
 """
 
 import hashlib
+import contextlib
+import http.client
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -872,7 +877,7 @@ class TestProvenanceSecurity(unittest.TestCase):
     def test_enclave_tools_help_schema(self):
         """39. Анклав: ендпоінт /help-tools повертає вичерпну схему інструментів для Antigravity."""
         schema = get_tools_help()
-        self.assertIn(schema.get("version"), ("0.9.11", "0.9.12"))
+        self.assertEqual(schema.get("version"), "0.9.13")
         self.assertIn("endpoints", schema)
         endpoints = schema.get("endpoints")
         self.assertIn("POST /apply", endpoints)
@@ -881,6 +886,150 @@ class TestProvenanceSecurity(unittest.TestCase):
         self.assertIn("GET /telemetry", endpoints)
         self.assertIn("GET /verify-chain", endpoints)
         self.assertIn("POST /attest", endpoints)
+
+    def test_enclave_cli_apply_contract(self):
+        import core.enclave.enclave_daemon as ed
+
+        prov, _ = ed._resolve_core_imports()
+        target = os.path.join(self.test_dir, "cli_target.py")
+        base = ["enclave_daemon.py", "--target", target, "--json-output"]
+
+        def run_cli(arguments):
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", base + arguments), contextlib.redirect_stdout(output):
+                result = ed.main()
+            return result, json.loads(output.getvalue())
+
+        with mock.patch.object(ed, "_resolve_core_imports", return_value=(prov, {})), \
+                mock.patch.object(ed, "is_daemon_running", return_value=False):
+            code, receipt = run_cli(["--direct-code", "value = 'old'\nother = 'old'\n"])
+            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
+            with open(target, encoding="utf-8") as f:
+                original = f.read()
+
+            patch_args = ["--mode", "patch", "--patch-target", "old", "--direct-code", "new"]
+            code, receipt = run_cli(patch_args)
+            self.assertEqual((code, receipt["status"]), (1, "ERROR"))
+            self.assertIn("occurs 2 times", receipt["error"])
+            with open(target, encoding="utf-8") as f:
+                self.assertEqual(f.read(), original)
+
+            code, receipt = run_cli(patch_args + ["--start-line", "1"])
+            self.assertEqual((code, receipt["status"]), (1, "ERROR"))
+            self.assertIn("provided together", receipt["error"])
+
+            lines = original.splitlines()
+            first_match = next(i for i, line in enumerate(lines, 1) if "old" in line)
+            code, receipt = run_cli(patch_args + ["--start-line", str(first_match),
+                                                  "--end-line", str(first_match)])
+            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
+            with open(target, encoding="utf-8") as f:
+                self.assertEqual(f.read().count("old"), 1)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(original)
+
+            code, receipt = run_cli(patch_args + ["--allow-multiple"])
+            self.assertEqual((code, receipt["status"]), (0, "SUCCESS"))
+            with open(target, encoding="utf-8") as f:
+                self.assertEqual(f.read().count("new"), 2)
+
+    def test_enclave_cli_daemon_payload(self):
+        import core.enclave.enclave_daemon as ed
+
+        args = ["enclave_daemon.py", "--target", "example.py", "--mode", "patch",
+                "--patch-target", "old", "--direct-code", "new", "--allow-multiple",
+                "--json-output"]
+        with mock.patch.object(sys, "argv", args), \
+                mock.patch.object(ed, "is_daemon_running", return_value=True), \
+                mock.patch.object(ed, "call_daemon_apply", return_value={"status": "SUCCESS"}) as call, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ed.main(), 0)
+        self.assertIs(call.call_args.args[0]["allow_multiple"], True)
+        self.assertEqual(call.call_args.args[0]["patch_target"], "old")
+
+    def test_enclave_cli_query_file_contract(self):
+        import core.enclave.enclave_daemon as ed
+
+        prompt_file = os.path.join(self.test_dir, "prompt.txt")
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write("Audit this plan.")
+        args = ["enclave_daemon.py", "--query", "ignored", "--query-file", prompt_file,
+                "--mode", "audit", "--tier", "4", "--json-output"]
+        response = {"status": "SUCCESS", "output": "answer"}
+        output = io.StringIO()
+        with mock.patch.object(sys, "argv", args), \
+                mock.patch.object(ed, "enclave_query", return_value=response) as query, \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(ed.main(), 0)
+        query.assert_called_once_with("Audit this plan.", tier=4.0, model=None, mode="audit")
+        self.assertEqual(json.loads(output.getvalue()), response)
+
+    def test_enclave_http_apply_contract(self):
+        import core.enclave.enclave_daemon as ed
+
+        prov, _ = ed._resolve_core_imports()
+        target = os.path.join(self.test_dir, "http_target.py")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("first = 'old'\nsecond = 'old'\n")
+        server = ed.ThreadingHTTPServer(("127.0.0.1", 0), ed.EnclaveHTTPHandler)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+
+        def post(payload):
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            try:
+                connection.request("POST", "/apply", json.dumps(payload),
+                                   {"Content-Type": "application/json"})
+                response = connection.getresponse()
+                return response.status, json.loads(response.read())
+            finally:
+                connection.close()
+
+        try:
+            with mock.patch.object(ed, "_resolve_core_imports", return_value=(prov, {})):
+                payload = {"target_path": target, "mode": "patch", "patch_target": "old",
+                           "direct_code": "new", "session_id": "http_test"}
+                status, receipt = post(payload)
+                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
+                with open(target, encoding="utf-8") as f:
+                    self.assertEqual(f.read(), "first = 'old'\nsecond = 'old'\n")
+
+                status, receipt = post({**payload, "allow_multiple": "false"})
+                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
+                self.assertIn("boolean", receipt["error"])
+
+                status, receipt = post({**payload, "start_line": 1})
+                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
+                self.assertIn("provided together", receipt["error"])
+
+                status, receipt = post({**payload, "start_line": "1", "end_line": 2})
+                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
+                self.assertIn("integers", receipt["error"])
+
+                status, receipt = post({**payload, "target_path": ""})
+                self.assertEqual((status, receipt["status"]), (422, "ERROR"))
+                self.assertIn("target_path", receipt["error"])
+
+                status, receipt = post({**payload, "allow_multiple": True})
+                self.assertEqual((status, receipt["status"]), (200, "SUCCESS"))
+                with open(target, encoding="utf-8") as f:
+                    self.assertEqual(f.read(), "first = 'new'\nsecond = 'new'\n")
+
+                connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+                try:
+                    connection.request("GET", "/help")
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.loads(response.read()), ed.get_tools_help())
+                    connection.request("GET", "/health")
+                    response = connection.getresponse()
+                    self.assertEqual(json.loads(response.read())["version"], "0.9.13")
+                finally:
+                    connection.close()
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
 
     def test_enclave_copilot_failover_gate(self):
         """40. Анклав: відмовостійкість (Failover Gate) — перехід з Copilot CLI на Claude Sonnet при вичерпанні квоти."""

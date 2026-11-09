@@ -16,6 +16,7 @@ Enclave Architecture (Trusted Sidecar / Privilege Separation Enclave Daemon)
 
 import argparse
 import ast
+import contextlib
 import hashlib
 import json
 import os
@@ -858,6 +859,16 @@ def enclave_apply(
     9. Повернення структурованого JSON-receipt.
     """
     start_time = time.time()
+    if not isinstance(target_path, str) or not target_path.strip():
+        return {"status": "ERROR", "error": "target_path must be a non-empty file path"}
+    if not isinstance(allow_multiple, bool):
+        return {"status": "ERROR", "error": "allow_multiple must be a boolean"}
+    if mode == "patch" and ((start_line is None) != (end_line is None)):
+        return {"status": "ERROR", "error": "start_line and end_line must be provided together"}
+    if mode == "patch" and start_line is not None and (
+        type(start_line) is not int or type(end_line) is not int
+    ):
+        return {"status": "ERROR", "error": "start_line and end_line must be integers"}
     prov_fns, diag_fns = _resolve_core_imports()
 
     if not prov_fns:
@@ -1248,21 +1259,22 @@ def get_tools_help() -> dict:
     """Інструментальний контракт та схема Довіреного Анклаву для Antigravity (Zero-Dep stdlib)."""
     return {
         "framework": "Hybrid IDE Trusted Enclave",
-        "version": "0.9.12",
+        "version": "0.9.13",
         "endpoints": {
             "POST /apply": {
                 "description": "Атомарний запис/модифікація файлу з первинним контролем (Anti-Echo, AST, HMAC-паспорт).",
                 "parameters": {
                     "target_path": "string (обов'язковий) — шлях до цільового файлу",
                     "mode": "string ('synthesize' | 'patch', default 'synthesize')",
-                    "task_prompt": "string — завдання для моделі ШІ",
+                    "task_prompt": "string — завдання для моделі ШІ; CLI: --task",
                     "direct_code": "string — готовий код для валідації та запису (без запиту до ШІ)",
                     "tier": "number (1, 2, 4, 4.5)",
                     "model": "string (назва моделі)",
                     "patch_target": "string (для mode='patch') — точний рядок для заміни",
-                    "start_line": "number (опціонально)",
-                    "end_line": "number (опціонально)",
-                    "allow_multiple": "boolean"
+                    "start_line": "integer (опціонально, 1-based inclusive; разом з end_line)",
+                    "end_line": "integer (опціонально, 1-based inclusive; разом з start_line)",
+                    "allow_multiple": "boolean (default false; CLI: --allow-multiple)",
+                    "session_id": "string (опціонально; лише HTTP)"
                 }
             },
             "POST /query": {
@@ -1271,13 +1283,16 @@ def get_tools_help() -> dict:
                     "prompt": "string (обов'язковий) — текст промпту/завдання",
                     "tier": "number (1, 2, 4, 4.5)",
                     "model": "string (опціонально)",
-                    "mode": "string ('query' | 'audit' | 'precheck')"
+                    "mode": "string (default 'query'; CLI default 'synthesize', для аудиту вказати --mode audit)"
                 }
             },
             "GET /battle-test": "Запуск 4-Tier Battle Test (Ollama, Groq, Claude Sonnet, Copilot CLI probe).",
             "GET /probe-providers": "Діагностичні зонди перевірки авторизації, підписок та квот провайдерів (Ollama, Groq, Gemini, OpenAI, OpenRouter, Copilot CLI).",
             "GET /telemetry": "Зняття 2D-телеметрії сесії (кроки, Nin/Nout, зона здоров'я контексту).",
             "GET /verify-chain": "Детерміністична верифікація ланцюга HMAC-паспортів у леджері.",
+            "GET /health": "Статус демона.",
+            "GET /help": "Ця інструментальна схема (також GET /help-tools).",
+            "GET /diagnostics": "Телеметрія та battle-test (також GET /check-all).",
             "POST /attest": "Реєстрація вердикту арбітра від Antigravity Pool ({'verdict': 'PASS'})."
         }
     }
@@ -1290,7 +1305,7 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             resp = {
                 "status": "READY",
-                "version": "0.9.12",
+                "version": "0.9.13",
                 "enclave": "Trusted Sidecar",
                 "tiers": [1, 2, 4, 4.5],
                 "time": time.time()
@@ -1308,7 +1323,7 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
         elif self.path in ("/diagnostics", "/check-all"):
             resp = {
                 "status": "READY",
-                "version": "0.9.12",
+                "version": "0.9.13",
                 "telemetry": get_telemetry(),
                 "battle_test": run_battle_test()
             }
@@ -1443,6 +1458,7 @@ def main():
     parser.add_argument("--patch-target", type=str, help="Вміст для заміни в файлі (для режиму patch)")
     parser.add_argument("--start-line", type=int, help="Початковий рядок заміни")
     parser.add_argument("--end-line", type=int, help="Кінцевий рядок заміни")
+    parser.add_argument("--allow-multiple", action="store_true", help="Дозволити заміну всіх збігів у режимі patch (типово заборонено)")
     parser.add_argument("--query", type=str, help="Виконати аудит або запит через анклав")
     parser.add_argument("--query-file", type=str, help="Виконати аудит або запит вмісту файлу через анклав")
     parser.add_argument("--help-tools", action="store_true", help="Вивести інструментальну схему анклаву")
@@ -1526,7 +1542,7 @@ def main():
     if args.check_all:
         diag = {
             "status": "READY",
-            "version": "0.9.12",
+            "version": "0.9.13",
             "telemetry": get_telemetry(),
             "battle_test": run_battle_test()
         }
@@ -1557,15 +1573,17 @@ def main():
             "allow_multiple": args.allow_multiple
         }
 
-        # Якщо активний локальний демон на 127.0.0.1, делегуємо через HTTP
-        if is_daemon_running(host=args.host, port=args.port):
-            try:
-                receipt = call_daemon_apply(payload, host=args.host, port=args.port)
-            except Exception as e:
-                print(f"⚠️ Помилка виклику демона анклаву: {e}. Виконуємо in-process fallback...", file=sys.stderr)
+        # Залишаємо stdout придатним для JSON, не приховуючи повідомлення паспорта.
+        output_context = contextlib.redirect_stdout(sys.stderr) if args.json_output else contextlib.nullcontext()
+        with output_context:
+            if is_daemon_running(host=args.host, port=args.port):
+                try:
+                    receipt = call_daemon_apply(payload, host=args.host, port=args.port)
+                except Exception as e:
+                    print(f"⚠️ Помилка виклику демона анклаву: {e}. Виконуємо in-process fallback...", file=sys.stderr)
+                    receipt = enclave_apply(**payload)
+            else:
                 receipt = enclave_apply(**payload)
-        else:
-            receipt = enclave_apply(**payload)
 
         if args.json_output:
             print(json.dumps(receipt, indent=2))
