@@ -1,0 +1,1651 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 3e76b68..da4e13b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -8,7 +8,7 @@
+ - **Архітектура модулів:**
+   * `core/enclave/enclave_daemon.py` — Довірений Анклав: єдиний ШІ-шлюз (Ollama, Groq, Claude Sonnet, Copilot CLI), первинний контроль коду, FrugalGPT та Failover.
+   * `core/enclave/ENCLAVE_INTERFACE.md` — інструментальний контракт Анклаву для Antigravity.
+-  * `core/engine/diagnostic_runner.py` — діагностичний інференс ШІ: Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet (`--sonnet-query`, `--sonnet-audit`, `--sonnet-precheck`), Tier 4.5 Copilot CLI, Semantic Constraint Checker & Pre-Audit Gate, in-process паспортний емітент та 8-token shingle overlap checker.
++  * `core/engine/diagnostic_runner.py` — діагностичний інференс ШІ: Tier 1 Ollama, Tier 2 Groq, Tier 4 Claude Sonnet (`--sonnet-query`), Tier 4.5 Copilot CLI; gated-аудити виконуються лише через Enclave для receipt та user-review gate.
+   * `core/hooks/pre_invocation_hook.py` (.sh) — PreInvocation Lifecycle Hook: авто-старт нових чатів (`invocationNum == 1`), ініціалізація Brain-First телеметрії та ін'єкція ephemeral-настанов регламенту.
+   * `core/hooks/pre_tool_hook.py` — OS Hard Gates: Zero Inline-Eval, Ledger Immutability Gate, Secret Isolation Gate, Deny-by-reference Shell State Isolation, Cryptographic Hash Passport Integrity Gate, In-Memory Replacement Simulation (`simulate_replacement`), Contributor Mode (`approved_plan.sha256`), Session-isolated Step Budget та Diagnostic Immunity (Kernel v0.9.12).
+   * `core/hooks/post_tool_hook.py` — Circuit Breaker (C4) та підтвердження криптографічних паспортів (`apply_passport` -> `APPLIED`).
+@@ -16,22 +16,22 @@
+   * `core/verify/test_provenance_security.py` — 40 детерміністичних unit-тестів безпеки провененсу, симулятора, міграційного цензора, Ledger Immutability Gate, конкурентності, ізоляції сесій та HMAC-підписів.
+   * `core/router/phase2_router.py` — маршрутизація моделей (Throughput Model) та бюджет токенів.
+   * `core/inspect/phase1_inspect.py` — 2D-телеметрія контексту та AST-інспектор.
+-  * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + 40 unit-тестів провененсу + 10 unit-тестів аудитора чату + політика 37/37).
++  * `core/verify/phase5_verify.py` — детерміністична локальна Фаза 5 (AST + provenance + audit-gate + chat-auditor unit-тести та валідатор політики).
+   * `core/verify/chat_context_auditor.py` — форензік-аудитор чату (Kernel v0.9.12) та Git State Seal Gate.
+   * `core/verify/verify_remote_ci.py` — опитування GitHub Actions CI.
+ 
+ ## 2. Реструктуризований конвеєр обробки завдань Довіреного Анклаву (v0.9.13)
+ 1. **Фаза 1: Діагностика (Двоканальна)** — лише читання (Канал A: `git status -sb`, `git ls-files`, `view_file`, `enclave_daemon.py --telemetry`; Канал B: `search_web`, `read_url_content` після Absence Verification). Обов'язковий стартовий статус-банер сесії з виміряним віджетом 2D-телеметрії `[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`.
+ 2. **Фаза 2: Репорт та план** — формування `implementation_plan.md` з обов'язковим віджетом індикатора контексту (`[CONTEXT HEALTH & DYNAMIC TELEMETRY INDICATOR]` у блоці коду `text`) та AI Routing Matrix.
+-3. **Фаза 2.5: Pre-Approval Gate (Tier 4 Claude Sonnet)** — аудит плану через Анклав (`enclave_daemon.py --query <plan> --tier 4 --mode audit` або Antigravity Pool Attestation Gate `POST /attest`).
+-4. **Фаза 3: Схвалення користувача** — обов'язкова зупинка (`+` — санкція на Фазу 4, `+!` — Attention Gate, `++` — санкція на реліз у Фазі 5). Звіт запиту на схвалення зобов'язаний містити актуальний віджет 2D-телеметрії у блоці коду `text`. Фіксація `approved_plan.sha256`.
++3. **Фаза 2.5: Pre-Approval Gate (Claude Sonnet)** — аудит плану виключно через `--audit-phase 2.5 --mode audit --tier 4 --session-id <conversation_id> --query-file <plan>`. Інші провайдери не є fallback для цієї фази. Анклав друкує `[AUDIT START]`/`[AUDIT END]`, зберігає звіт і SHA-256 receipt, а результат без структурованого вердикту є помилкою. Після звіту оркестратор зобов'язаний показати його користувачу через Request Feedback і зупинитися.
++4. **Фаза 3: Схвалення користувача** — тільки після `PASS` користувач може вибрати точний варіант `AUDIT-REVIEWED <audit_id> APPROVE_PLAN`; для змін — `AUDIT-REVIEWED <audit_id> ALLOW_PLAN_REVISION`. Не підміняти ці відповіді `+`/`++`. `approved_plan.sha256` створюється лише `audit_gate.py` після перевірки transcript, receipt та незмінного SHA-256 плану. Зміна схваленого плану вимагає повторного аудиту й підтвердження. Звіт запиту на схвалення зобов'язаний містити актуальний віджет 2D-телеметрії у блоці коду `text`.
+ 5. **Фаза 4.1: Pre-Execution Context Assembly** — збірка всієї інформації та вихідного коду за планом оркестратором Antigravity (читання через `view_file`, `git show`, zero-shell).
+-6. **Фаза 4.2: Pre-Check Audit Gate (Tier 4 Claude Sonnet)** — семантичний аудит плану та контексту через Анклав (`enclave_daemon.py --query <context> --tier 4 --mode precheck`).
+-7. **Фаза 4.3: Синтез коду та первинний контроль Анклаву** — генерація коду суворо через Анклав на моделі Ollama (`1.5b`, `3b` або `7b`) відповідно до телеметрії Фази 1 (при оверфлоу $>3000$ tok або RAM $<6$ ГБ — автоматичний перехід на Groq `openai/gpt-oss-120b`, `llama-3.3-70b`). Анклав здійснює Anti-Echo ($ \le 0.25$), AST syntax gate, симуляцію заміни, обчислення SHA256 та випуск HMAC-SHA256 паспорта (`MINTED -> RESERVED -> APPLIED`).
++6. **Фаза 4.2: Pre-Check Audit Gate (Claude Sonnet)** — аудит плану й повного зібраного контексту виключно через `--audit-phase 4.2 --mode precheck --tier 4 --session-id <conversation_id> --query-file <context>`. Після звіту зупинитися на Request Feedback; синтез дозволений лише після `PASS` і точного `AUDIT-REVIEWED <audit_id> PROCEED`.
++7. **Фаза 4.3: Синтез коду та первинний контроль Анклаву** — генерація коду суворо через Анклав на моделі Ollama (`1.5b`, `3b` або `7b`) відповідно до телеметрії Фази 1 (при оверфлоу $>3000$ tok або RAM $<6$ ГБ — автоматичний перехід на Groq `openai/gpt-oss-120b`, `llama-3.3-70b`). Анклав здійснює Anti-Echo ($ \le 0.25$), AST syntax gate, симуляцію заміни, обчислення SHA256 та випуск HMAC-SHA256 паспорта (`MINTED -> RESERVED -> APPLIED`). Перевірки схваленого плану й Phase 4.2 enforced у PreToolUse.
+ 8. **Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт** — резервування паспорта (`reserve_passport` -> `RESERVED`) через in-memory симуляцію заміни (`simulate_replacement`), верифікація після запису (`apply_passport` -> `APPLIED` з перепідписом), локальна валідація Python AST, `py_compile`. Contributor Mode захищає ядро через `approved_plan.sha256`.
+-9. **Фаза 4.5: Pre-Release E2E Arbiter з Failover Gate** — повний аудит модифікованого пакета через Copilot CLI (`enclave_daemon.py --query <diff> --tier 4.5 --mode audit`). Якщо Copilot недоступний (вичерпано квоту) — автоматичне перенаправлення на верифікацію до Claude Sonnet (Tier 4). Тільки після успішної верифікації публікується репорт Фази 4 з обов'язковою фіксацією SHA-256 та Passport ID від Анклаву.
++9. **Фаза 4.5: Pre-Release E2E Arbiter** — аудит повного diff через Copilot CLI (`--audit-phase 4.5 --mode audit --tier 4.5 --session-id <conversation_id> --query-file <diff>`), із failover лише на Claude Sonnet. Приймається тільки структурований звіт. Показати звіт у Request Feedback і зупинитися; `PASS` ще не є готовністю до деплою. Користувач має відповісти `AUDIT-REVIEWED <audit_id> READY_FOR_DEPLOY`, а diff має лишитися незмінним.
+ 10. **Фаза 5.1: Dual-Audit Report & Verification** — перевірка ланцюга паспортів (`enclave_daemon.py --verify-chain`) та тести `phase5_verify.py` (40 unit-тестів + 37/37 перевірок + тести `chat_context_auditor.py`). Фінальний звіт у чаті та шапка `walkthrough.md` зобов'язані містити актуальний віджет 2D-телеметрії у блоці коду `text`.
+-11. **Фаза 5.2: Git State Seal Gate** — після успішних тестів оркестратор ЗОБОВ'ЯЗАНИЙ АВТОНОМНО виконати `git add <файли>` та `git commit -m "<type>(<scope>): <опис> [verified: antigravity]"`, отримати Commit SHA та внести його у фінальний `walkthrough.md`. Санкція `+` покриває виконання Фази 4 та локальний коміт Фази 5; санкція `++` потрібна виключно для віддаленого пушу (`push_to_github.sh` / `git push`). Заборонено залишати репозиторій у незапечатаному стані.
++11. **Фаза 5.2: Git State Seal Gate** — після тестів локальний коміт дозволений тільки після Phase 4.5 PASS, явного `READY_FOR_DEPLOY` Request Feedback та незмінного аудованого diff. Пуш усе ще потребує окремого `++`. Якщо звіт не PASS, запит змін, receipt чи підтвердження відсутні, коміт/пуш блокуються; не перезапускати аудит із незмінним payload.
+ 
+ ## 3. Каталог інструментів Довіреного Анклаву та супутніх інтерфейсів (Tool Catalog)
+ - **Головні інструменти Анклаву (`~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py`, локально `core/enclave/enclave_daemon.py`):**
+@@ -41,12 +41,13 @@
+   * `GET /telemetry` (`--telemetry`) — 2D-телеметрія (кроки, Nin/Nout, вільна RAM, зона контексту).
+   * `GET /help` (`--help-tools`) — інструментальна схема викликів.
+   * `GET /verify-chain` (`--verify-chain`) — перевірка ланцюга паспортів леджера.
+-  * `POST /attest` (`--attest-arbiter [VERDICT]`) — вердикт арбітра Antigravity Pool.
++  * `POST /attest` (`--attest-arbiter [VERDICT]`) — запис довільного атестаційного тексту; **не є аудитом, receipt, схваленням плану чи заміною фаз 2.5/4.2/4.5**.
++  * `core/verify/audit_gate.py` — строгий формат аудиторського звіту, сесійні receipts, дедуплікація однакових запитів і перевірка точного Request Feedback.
+ - **Супутні та інтеграційні інтерфейси:**
+   * **LinkedIn Developer API:** OAuth 2.0 у `~/.env` (`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI`) для інтеграцій.
+   * **Email & SMTP нотифікації:** модулі відправлення системних сповіщень та звітів.
+   * **Контрактний довідник:** [`~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md`](file:///home/hills/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md) (локально [`core/enclave/ENCLAVE_INTERFACE.md`](file:///home/hills/Documents/Hybrid-IDE-for-contributors/core/enclave/ENCLAVE_INTERFACE.md), читання через `view_file`).
+-  * **Верифікаційні інструменти:** [`~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py`](file:///home/hills/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py) (локально `core/verify/phase5_verify.py`, 40 unit-тестів + 10 auditor + 37/37 перевірок політики).
++  * **Верифікаційні інструменти:** [`~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py`](file:///home/hills/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py) (локально `core/verify/phase5_verify.py`, provenance + audit-gate + chat-auditor unit-тести та перевірки політики).
+ - **Регламент інструментальних запитів до Анклаву (Anchored Instrumental Requests):**
+   * Оркестратору заборонено надсилати неструктуровані чи сліпі промпти («зроби щось», «напиши код»).
+   * Перед кожним викликом оркестратор зобов'язаний звіритися з інтерфейсом `core/enclave/ENCLAVE_INTERFACE.md` або викликом `enclave_daemon.py --help-tools`.
+@@ -70,4 +71,3 @@
+ ## 6. Стиль комітів
+ - `<type>(<scope>): <опис> [generated: <model> | verified: antigravity]`
+ - Передрелізний аудит: `chore(release): ... [audited: copilot-cli | verified: claude | verified: antigravity]`
+-
+diff --git a/core/enclave/ENCLAVE_INTERFACE.md b/core/enclave/ENCLAVE_INTERFACE.md
+index 4a5211a..b83c843 100644
+--- a/core/enclave/ENCLAVE_INTERFACE.md
++++ b/core/enclave/ENCLAVE_INTERFACE.md
+@@ -74,26 +74,56 @@ CLI з `--json-output` друкує receipt; код завершення 0 оз
+ 
+ ```bash
+ python3 core/enclave/enclave_daemon.py \
+-  --query 'Перевір наведений план на пропущені ризики: ...' \
+-  --tier 4 --mode audit --json-output
+-python3 core/enclave/enclave_daemon.py \
+-  --query-file /tmp/audit-prompt.txt --tier 4 --mode precheck --json-output
++  --query-file /path/to/implementation_plan.md \
++  --tier 4 --mode audit --audit-phase 2.5 \
++  --session-id <conversation_id> --json-output
+ ```
+ 
+ ```http
+ POST /query
+ Content-Type: application/json
+ 
+-{"prompt":"Перевір наведений план на пропущені ризики: ...","tier":4,"mode":"audit"}
++{"prompt":"<повний текст плану або context/diff>","tier":4,"mode":"audit","audit_phase":"2.5","session_id":"<conversation_id>","subject_sha256":"<sha256 аудованого артефакту>"}
+ ```
+ 
+ HTTP приймає `prompt`, `tier`, `model`, `mode`; типові значення — tier 1 і
+-mode `query`. CLI має спільний `--mode` з типовим `synthesize`, тому для
+-аудиту чи precheck задавайте `--mode` явно. HTTP повертає 200 для `SUCCESS`,
+-422 для `ERROR`. CLI повертає 0 або 1 відповідно. `SUCCESS` означає лише,
+-що результат не починається з `ERROR:`: це **не доказ проведеного аудиту,
+-PASS чи незалежної перевірки**. Маршрутизація може повернути текст атестації
+-за наявності старого прапорця; перевіряйте зміст і походження відповіді.
++mode `query`. CLI має спільний `--mode` з типовим `synthesize`, тому для аудиту чи precheck
++задавайте `--mode`, `--audit-phase` та `--session-id` явно:
++
++| Фаза | Провайдер | Параметри |
++|---|---|---|
++| 2.5 — план | Claude Sonnet; без fallback | `--audit-phase 2.5 --mode audit --tier 4` |
++| 4.2 — план і зібраний контекст | Claude Sonnet; без fallback | `--audit-phase 4.2 --mode precheck --tier 4` |
++| 4.5 — повний diff | Copilot CLI, failover лише на Claude Sonnet | `--audit-phase 4.5 --mode audit --tier 4.5` |
++
++Кожен аудит потребує `--session-id <conversation_id>` і повного файла запиту
++через `--query-file`. Перед запуском звірте цільовий файл окремо: для 2.5 це
++`implementation_plan.md`, для 4.2 — план разом із потрібним контекстом, для
++4.5 — точний вивід `git diff --binary HEAD`. Не надсилайте шлях до неіснуючого
++файла як prompt. HTTP `POST /query` приймає ті самі поля `audit_phase`,
++`session_id` та `subject_sha256`.
++
++Аудит друкує `[AUDIT START]` перед викликом і `[AUDIT END]` після нього та
++зберігає сесійний receipt із SHA-256 запиту й відповіді. `execution` (чи
++відбувся запуск) і `verdict` (результат перевірки) — незалежні поля.
++Єдиний прийнятний звіт має форму:
++
++```text
++AUDIT_REPORT:
++Змістовний звіт із висновками та доказами...
++AUDIT_VERDICT: PASS
++```
++
++`CHANGES_REQUIRED`, `FAIL`, відсутній/некоректний звіт і помилка провайдера
++не є PASS. Відповідь моделі сама по собі не запускає наступну фазу. Після
++звіту оркестратор показує його через Request Feedback і зупиняється. Для
++плану потрібна точна відповідь `AUDIT-REVIEWED <audit_id> APPROVE_PLAN`;
++для старту синтезу — `AUDIT-REVIEWED <audit_id> PROCEED`; для релізу —
++`AUDIT-REVIEWED <audit_id> READY_FOR_DEPLOY`. Зміни плану потребують
++`ALLOW_PLAN_REVISION`, а зауваження аудиту — `REVIEW_FINDINGS` або
++`ALLOW_FIXES` відповідно до фази. Сесійний transcript і receipts захищені
++від прямого запису інструментами агента. Старий прапорець або `POST /attest`
++не може створити PASS чи підтвердження користувача.
+ 
+ ## Інші операції
+ 
+diff --git a/core/enclave/enclave_daemon.py b/core/enclave/enclave_daemon.py
+index f94bea0..84f06dc 100644
+--- a/core/enclave/enclave_daemon.py
++++ b/core/enclave/enclave_daemon.py
+@@ -21,10 +21,12 @@ import hashlib
+ import json
+ import os
+ import re
++import selectors
+ import shutil
+ import subprocess
+ import sys
+ import time
++import uuid
+ import urllib.request
+ import urllib.error
+ from http.server import ThreadingHTTPServer, HTTPServer, BaseHTTPRequestHandler
+@@ -35,6 +37,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
+ if PROJECT_ROOT not in sys.path:
+     sys.path.insert(0, PROJECT_ROOT)
+ 
++from core.verify.audit_gate import ensure_new_audit_payload, parse_audit_report, record_audit
++
+ DEFAULT_ENCLAVE_PORT = 8765
+ DEFAULT_ENCLAVE_HOST = "127.0.0.1"
+ 
+@@ -643,6 +647,50 @@ def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
+ 
+     cmd = [copilot_bin, "--allow-all-paths", "--no-ask-user", "--no-color", "-p", cli_prompt]
+     try:
++        if mode == "audit":
++            proc = subprocess.Popen(
++                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
++            )
++            selector = selectors.DefaultSelector()
++            selector.register(proc.stdout, selectors.EVENT_READ)
++            output_chunks = []
++            deadline = time.monotonic() + 180
++            try:
++                while selector.get_map():
++                    remaining = deadline - time.monotonic()
++                    if remaining <= 0:
++                        raise subprocess.TimeoutExpired(cmd, 180)
++                    for key, _ in selector.select(remaining):
++                        chunk = os.read(key.fd, 4096)
++                        if not chunk:
++                            selector.unregister(key.fileobj)
++                            continue
++                        output_chunks.append(chunk)
++                        sys.stdout.write(chunk.decode("utf-8", errors="replace"))
++                        sys.stdout.flush()
++                return_code = proc.wait(timeout=max(0.1, deadline - time.monotonic()))
++            except subprocess.TimeoutExpired:
++                proc.kill()
++                proc.wait()
++                return "COPILOT_TIMEOUT", True
++            finally:
++                selector.close()
++                proc.stdout.close()
++
++            out = b"".join(output_chunks).decode("utf-8", errors="replace").strip()
++            combined = out.lower()
++            if "argument list too long" in combined or return_code == 7:
++                return "COPILOT_ARG_TOO_LONG", True
++            if (
++                return_code != 0
++                or "exceeded monthly quota" in combined
++                or "credit limit" in combined
++                or "ai credits 0" in combined
++                or "insufficient credits" in combined
++            ):
++                return f"COPILOT_QUOTA_EXCEEDED: {out}".strip(), True
++            return out, False
++
+         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
+         out = (proc.stdout or "").strip()
+         err = (proc.stderr or "").strip()
+@@ -720,9 +768,25 @@ def query_all_tier_ai(
+     # 1. Tier 4.5 (Copilot CLI) з детермінованим Failover Gate на Tier 4 (Claude Sonnet Arbiter)
+     if tier == 4.5 or model == "copilot-cli":
+         cop_out, quota_exceeded = direct_query_copilot(prompt, mode=mode)
+-        if not quota_exceeded and not cop_out.startswith("COPILOT_"):
++        if not quota_exceeded and cop_out.strip() and not cop_out.startswith(("COPILOT_", "ERROR:")):
+             return cop_out, "copilot-cli", 4.5
+         print(f"⚠️ [FAILOVER GATE]: Copilot CLI ({cop_out[:60]}). Direct failover to Tier 4 (Claude Sonnet Arbiter)...", file=sys.stderr)
++        if mode in ("audit", "precheck"):
++            if diag_fns and "query_claude" in diag_fns:
++                claude_res = diag_fns["query_claude"](
++                    prompt,
++                    mode=mode,
++                    model="claude-3-5-sonnet-20241022",
++                    allow_copilot_fallback=False,
++                    return_metadata=True,
++                )
++                if isinstance(claude_res, tuple):
++                    claude_text, claude_provider, executed = claude_res
++                else:
++                    claude_text, claude_provider, executed = claude_res, "Claude Sonnet", bool(claude_res)
++                if executed and claude_text and not str(claude_text).startswith(("ERROR:", "CLAUDE_")):
++                    return claude_text, f"claude-3-5-sonnet-20241022 ({claude_provider})", 4
++            return "ERROR: Copilot CLI and Claude Sonnet audit routes failed", "none", 0
+         tier = 4
+         model = "claude-3-5-sonnet-20241022"
+ 
+@@ -752,15 +816,29 @@ def query_all_tier_ai(
+     if tier == 4 or (model and "claude" in model.lower()):
+         resolved_model = model or "claude-3-5-sonnet-20241022"
+         if diag_fns and "query_claude" in diag_fns:
+-            res = diag_fns["query_claude"](prompt, mode="query" if mode == "synthesize" else "audit", model=resolved_model)
++            if mode in ("audit", "precheck"):
++                audit_res = diag_fns["query_claude"](
++                    prompt,
++                    mode=mode,
++                    model=resolved_model,
++                    allow_copilot_fallback=False,
++                    return_metadata=True,
++                )
++                if isinstance(audit_res, tuple):
++                    res, provider, executed = audit_res
++                else:
++                    res, provider, executed = audit_res, "Claude Sonnet", bool(audit_res)
++                if executed and res and not str(res).startswith(("CLAUDE_", "ERROR:")):
++                    return res, f"{resolved_model} ({provider})", 4
++                return "ERROR: Claude Sonnet audit route failed", "none", 0
++            res = diag_fns["query_claude"](prompt, mode=mode, model=resolved_model)
+             if res and not str(res).startswith("CLAUDE_ALL_PROVIDERS_FAILED"):
+                 return res, resolved_model, 4
++        if mode in ("audit", "precheck"):
++            return "ERROR: Claude Sonnet audit route unavailable", "none", 0
+         or_res = direct_query_openrouter(prompt, model="anthropic/claude-3.5-sonnet")
+         if not or_res.startswith("OPENROUTER_"):
+             return or_res, "anthropic/claude-3.5-sonnet", 4
+-        attest_file = os.path.join(PROJECT_ROOT, "claude_verified.flag")
+-        if os.path.exists(attest_file):
+-            return "VERIFIED: Antigravity Pool Arbiter Attested", resolved_model, 4
+         # fallback down to Tier 2
+         tier = 2
+         model = "openai/gpt-oss-120b"
+@@ -1060,14 +1138,107 @@ def enclave_query(
+     prompt: str,
+     tier: int = 1,
+     model: str = None,
+-    mode: str = "query"
++    mode: str = "query",
++    session_id: str = None,
++    audit_phase: str = None,
++    subject_sha256: str = None,
+ ) -> dict:
+-    """Виконання запиту або аудиту моделі через Анклав з провененс-атестацією."""
++    """Run a query; audit modes require an explicit phase and session-bound review receipt."""
+     start_time = time.time()
++    audit_id = None
++    audit_prompt = prompt
++    phase = None
++    if mode in ("audit", "precheck"):
++        phase = audit_phase or ("4.2" if mode == "precheck" else ("4.5" if tier == 4.5 else "2.5"))
++        expected = {"2.5": ("audit", 4), "4.2": ("precheck", 4), "4.5": ("audit", 4.5)}
++        if phase not in expected or expected[phase] != (mode, tier):
++            return {"status": "ERROR", "error": "Audit phase, mode, and tier do not match"}
++        if not session_id:
++            return {"status": "ERROR", "error": "Audit calls require the explicit Antigravity conversation ID"}
++        audit_prompt = (
++            f"You are the independent read-only auditor for Phase {phase}. Review the supplied "
++            "artifact only; do not greet, summarize without findings, or claim checks you did not run. "
++            "Return exactly one AUDIT_REPORT: line, followed by a substantive human-readable "
++            "report, then exactly one final line: AUDIT_VERDICT: PASS, "
++            "AUDIT_VERDICT: CHANGES_REQUIRED, or AUDIT_VERDICT: FAIL. "
++            "A greeting or unstructured response is not a valid audit.\n\n"
++            f"=== PHASE {phase} AUDIT INPUT ===\n{prompt}"
++        )
++        try:
++            ensure_new_audit_payload(session_id, phase, audit_prompt)
++        except (OSError, ValueError) as exc:
++            return {"status": "ERROR", "error": f"Audit blocked: {exc}"}
++        audit_id = uuid.uuid4().hex
++        prompt_sha = hashlib.sha256(audit_prompt.encode("utf-8")).hexdigest()
++        requested = "GitHub Copilot CLI (Tier 4.5, Claude Sonnet failover)" if phase == "4.5" else "Claude Sonnet"
++        print(
++            f"[AUDIT START] id={audit_id} phase={phase} requested={requested} "
++            f"request_sha256={prompt_sha} status=RUNNING",
++            flush=True,
++        )
++
+     _, diag_fns = _resolve_core_imports()
+-    output_text, used_model, used_tier = query_all_tier_ai(prompt, tier=tier, model=model, mode=mode)
++    output_text, used_model, used_tier = query_all_tier_ai(
++        audit_prompt, tier=tier, model=model, mode=mode
++    )
+     elapsed = round(time.time() - start_time, 2)
+ 
++    if phase:
++        execution = (
++            "COMPLETED"
++            if output_text and used_tier > 0 and not output_text.startswith(("ERROR:", "COPILOT_", "CLAUDE_"))
++            else "FAILED"
++        )
++        verdict, report = parse_audit_report(output_text) if execution == "COMPLETED" else (
++            "INVALID_REPORT", output_text or "Auditor returned no response."
++        )
++        try:
++            receipt = record_audit(
++                session_id=session_id,
++                phase=phase,
++                request=audit_prompt,
++                response=output_text or "",
++                auditor=used_model,
++                execution=execution,
++                verdict=verdict,
++                audit_id=audit_id,
++                subject_sha256=subject_sha256,
++            )
++        except (OSError, ValueError) as exc:
++            return {"status": "ERROR", "error": f"Could not persist audit receipt: {exc}"}
++
++        print(
++            f"[AUDIT END] id={audit_id} phase={phase} auditor={used_model} "
++            f"execution={execution} verdict={verdict} elapsed={elapsed}s "
++            f"receipt={os.path.join(os.path.expanduser('~/.gemini/antigravity/brain'), session_id, '.system_generated', 'audits', audit_id + '.json')}",
++            flush=True,
++        )
++        required_action = {
++            "2.5": "APPROVE_PLAN" if verdict == "PASS" else "ALLOW_PLAN_REVISION",
++            "4.2": "PROCEED" if verdict == "PASS" else "REVIEW_FINDINGS",
++            "4.5": "READY_FOR_DEPLOY" if verdict == "PASS" else "ALLOW_FIXES",
++        }[phase]
++        status = {
++            "PASS": "AUDIT_REVIEW_REQUIRED",
++            "CHANGES_REQUIRED": "AUDIT_CHANGES_REQUIRED",
++            "FAIL": "AUDIT_FAILED",
++            "INVALID_REPORT": "AUDIT_INVALID_REPORT",
++        }[verdict]
++        return {
++            "status": status,
++            "execution": execution,
++            "audit_id": audit_id,
++            "phase": phase,
++            "auditor": used_model,
++            "verdict": verdict,
++            "report": report,
++            "request_sha256": receipt["request_sha256"],
++            "response_sha256": receipt["response_sha256"],
++            "required_user_response": f"AUDIT-REVIEWED {audit_id} {required_action}",
++            "elapsed_sec": elapsed,
++            "ready_for_deploy": False,
++        }
++
+     if diag_fns and "write_session_flag" in diag_fns:
+         diag_fns["write_session_flag"](
+             f"enclave_{mode}.flag",
+@@ -1196,40 +1367,13 @@ def get_telemetry() -> dict:
+ 
+ 
+ def attest_arbiter(verdict: str = "PASS", arbiter: str = "Antigravity Pool (Claude Sonnet)") -> dict:
+-    """Фіксація атестації арбітра в сесії та проекті (POST /attest)."""
+-    _, diag_fns = _resolve_core_imports()
+-    flag_path = os.path.join(PROJECT_ROOT, "claude_verified.flag")
+-    try:
+-        with open(flag_path, "w", encoding="utf-8") as f:
+-            f.write(f"CLAUDE_VERIFIED: verdict={verdict} arbiter={arbiter} timestamp={time.time()}\n")
+-    except Exception:
+-        pass
+-
+-    # Також фіксація в активній brain-сесії
+-    brain_root = os.path.expanduser("~/.gemini/antigravity/brain")
+-    if os.path.isdir(brain_root):
+-        try:
+-            cands = [os.path.join(brain_root, d) for d in os.listdir(brain_root) if os.path.isdir(os.path.join(brain_root, d))]
+-            if cands:
+-                cands.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+-                sg_flags = os.path.join(cands[0], ".system_generated", "flags")
+-                os.makedirs(sg_flags, exist_ok=True)
+-                with open(os.path.join(sg_flags, "claude_verified.flag"), "w", encoding="utf-8") as bf:
+-                    bf.write(f"CLAUDE_VERIFIED: verdict={verdict} arbiter={arbiter} timestamp={time.time()}\n")
+-        except Exception:
+-            pass
+-
+-    if diag_fns and "write_session_flag" in diag_fns:
+-        diag_fns["write_session_flag"](
+-            "claude_verified.flag",
+-            f"ARBITER_ATTESTATION: verdict={verdict} arbiter={arbiter} timestamp={time.time()}\n"
+-        )
+-
++    """Return a self-asserted claim without treating it as audit evidence."""
+     return {
+-        "status": "SUCCESS",
++        "status": "RECORDED_NOT_VERIFIED",
+         "verdict": verdict,
+         "arbiter": arbiter,
+-        "flag_file": flag_path,
++        "verified": False,
++        "message": "A declared attestation is not a completed, report-bound audit.",
+         "timestamp": time.time()
+     }
+ 
+@@ -1278,12 +1422,17 @@ def get_tools_help() -> dict:
+                 }
+             },
+             "POST /query": {
+-                "description": "Запит, пречек або аудит через суверенний шлюз ШІ (Ollama, Groq, Claude Sonnet).",
++                "description": "Gated audit: Claude Sonnet for 2.5/4.2; Copilot CLI with Claude-only failover for 4.5. Emits live audit status, strict report, session receipt, and required user-review action. A verdict alone never authorizes the next phase.",
+                 "parameters": {
+                     "prompt": "string (обов'язковий) — текст промпту/завдання",
+                     "tier": "number (1, 2, 4, 4.5)",
+                     "model": "string (опціонально)",
+-                    "mode": "string (default 'query'; CLI default 'synthesize', для аудиту вказати --mode audit)"
++                    "mode": "string (default 'query'; CLI default 'synthesize')",
++                    "audit_phase": "string ('2.5' | '4.2' | '4.5'; required with matching mode and tier)",
++                    "session_id": "string (required for audit/precheck; Antigravity conversation ID)",
++                    "subject_sha256": "string (SHA-256 of exact reviewed artifact; required to bind Phase 4.5 diff)",
++                    "audit_response": "AUDIT_REPORT: <substantive findings> followed by one final AUDIT_VERDICT: PASS | CHANGES_REQUIRED | FAIL line",
++                    "review_gate": "Request Feedback must return the exact required_user_response in the JSON receipt before continuing"
+                 }
+             },
+             "GET /battle-test": "Запуск 4-Tier Battle Test (Ollama, Groq, Claude Sonnet, Copilot CLI probe).",
+@@ -1293,7 +1442,7 @@ def get_tools_help() -> dict:
+             "GET /health": "Статус демона.",
+             "GET /help": "Ця інструментальна схема (також GET /help-tools).",
+             "GET /diagnostics": "Телеметрія та battle-test (також GET /check-all).",
+-            "POST /attest": "Реєстрація вердикту арбітра від Antigravity Pool ({'verdict': 'PASS'})."
++            "POST /attest": "Самодекларація арбітра без статусу аудиторського доказу; не створює verified-флаг."
+         }
+     }
+ 
+@@ -1374,9 +1523,12 @@ class EnclaveHTTPHandler(BaseHTTPRequestHandler):
+                 prompt=req_data.get("prompt", ""),
+                 tier=req_data.get("tier", 1),
+                 model=req_data.get("model"),
+-                mode=req_data.get("mode", "query")
++                mode=req_data.get("mode", "query"),
++                session_id=req_data.get("session_id"),
++                audit_phase=req_data.get("audit_phase"),
++                subject_sha256=req_data.get("subject_sha256"),
+             )
+-            code = 200 if res.get("status") == "SUCCESS" else 422
++            code = 200 if res.get("status") in ("SUCCESS", "AUDIT_REVIEW_REQUIRED") else 422
+             self.send_response(code)
+             self.send_header("Content-Type", "application/json")
+             self.end_headers()
+@@ -1461,6 +1613,8 @@ def main():
+     parser.add_argument("--allow-multiple", action="store_true", help="Дозволити заміну всіх збігів у режимі patch (типово заборонено)")
+     parser.add_argument("--query", type=str, help="Виконати аудит або запит через анклав")
+     parser.add_argument("--query-file", type=str, help="Виконати аудит або запит вмісту файлу через анклав")
++    parser.add_argument("--audit-phase", choices=["2.5", "4.2", "4.5"], help="Фаза аудиту з обов'язковим журналом виконання та review gate")
++    parser.add_argument("--session-id", type=str, help="ID поточної Antigravity conversation (обов'язковий для аудиту)")
+     parser.add_argument("--help-tools", action="store_true", help="Вивести інструментальну схему анклаву")
+     parser.add_argument("--battle-test", action="store_true", help="Запустити 4-Tier AI Battle Test")
+     parser.add_argument("--telemetry", action="store_true", help="Вивести 2D-телеметрію контексту")
+@@ -1502,18 +1656,31 @@ def main():
+ 
+     if args.query or args.query_file:
+         query_text = args.query
++        subject_sha256 = None
+         if args.query_file:
+             if not os.path.isfile(args.query_file):
+                 print(f"❌ [QUERY FILE ERROR]: File not found: {args.query_file}", file=sys.stderr)
+                 return 1
+-            with open(args.query_file, "r", encoding="utf-8", errors="replace") as qf:
+-                query_text = qf.read()
+-        res = enclave_query(query_text, tier=args.tier or 1, model=args.model, mode=args.mode)
++            with open(args.query_file, "rb") as qf:
++                query_bytes = qf.read()
++            subject_sha256 = hashlib.sha256(query_bytes).hexdigest()
++            query_text = query_bytes.decode("utf-8", errors="replace")
++        res = enclave_query(
++            query_text,
++            tier=args.tier or 1,
++            model=args.model,
++            mode=args.mode,
++            session_id=args.session_id,
++            audit_phase=args.audit_phase,
++            subject_sha256=subject_sha256,
++        )
+         if args.json_output:
+             print(json.dumps(res, indent=2))
++        elif args.mode in ("audit", "precheck"):
++            print(json.dumps(res, indent=2, ensure_ascii=False))
+         else:
+             print(res.get("output", ""))
+-        return 0 if res.get("status") == "SUCCESS" else 1
++        return 0 if res.get("status") in ("SUCCESS", "AUDIT_REVIEW_REQUIRED") else 1
+ 
+     if args.help_tools:
+         print(json.dumps(get_tools_help(), indent=2, ensure_ascii=False))
+@@ -1551,8 +1718,8 @@ def main():
+ 
+     if args.attest_arbiter:
+         att = attest_arbiter(verdict=args.attest_arbiter)
+-        print(f"✅ [ARBITER ATTESTED] Verdict: {att.get('verdict')} by {att.get('arbiter')}")
+-        return 0
++        print(f"⚠️ [UNVERIFIED ARBITER CLAIM] Verdict: {att.get('verdict')} by {att.get('arbiter')}")
++        return 1
+ 
+     if args.verify_chain:
+         res_vc = enclave_verify_chain()
+@@ -1570,7 +1737,8 @@ def main():
+             "patch_target": args.patch_target,
+             "start_line": args.start_line,
+             "end_line": args.end_line,
+-            "allow_multiple": args.allow_multiple
++            "allow_multiple": args.allow_multiple,
++            "session_id": args.session_id
+         }
+ 
+         # Залишаємо stdout придатним для JSON, не приховуючи повідомлення паспорта.
+diff --git a/core/engine/diagnostic_runner.py b/core/engine/diagnostic_runner.py
+index e4d4536..dc643b6 100755
+--- a/core/engine/diagnostic_runner.py
++++ b/core/engine/diagnostic_runner.py
+@@ -496,7 +496,14 @@ def query_openrouter_engine(prompt: str, model: str = "qwen/qwen-2.5-coder-32b-i
+         print(f"❌ Помилка запиту до OpenRouter: {e}", file=sys.stderr)
+         return f"ERROR: {e}"
+ 
+-def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = None, model: str = "claude-3-5-sonnet-20241022") -> str:
++def query_claude_engine(
++    prompt: str,
++    mode: str = "query",
++    extra_args: list = None,
++    model: str = "claude-3-5-sonnet-20241022",
++    allow_copilot_fallback: bool = True,
++    return_metadata: bool = False,
++):
+     """
+     Інференс Tier 4: Claude Sonnet Arbiter (Policy v0.9.9).
+     Каскад провайдерів:
+@@ -517,6 +524,14 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
+         )
+     else:
+         target_prompt = prompt
++    if mode in ("audit", "precheck"):
++        target_prompt += (
++            "\n\nReturn exactly one AUDIT_REPORT: line, followed by a substantive "
++            "human-readable report (at least a summary and findings), then exactly "
++            "one final line: AUDIT_VERDICT: PASS, AUDIT_VERDICT: CHANGES_REQUIRED, "
++            "or AUDIT_VERDICT: FAIL. "
++            "Do not return a greeting or an unstructured success message."
++        )
+ 
+     output_text = None
+     provider_used = None
+@@ -575,8 +590,8 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
+             except Exception as e:
+                 print(f"⚠️ OpenRouter Claude fallback помилка/пропуск: {e}", file=sys.stderr)
+ 
+-    # 3. Copilot CLI Fallback (Tier 4 / 4.5 Arbiter)
+-    if not output_text:
++    # 3. Optional Copilot CLI fallback. Strict Claude audit phases disable this.
++    if not output_text and allow_copilot_fallback:
+         copilot_bin = shutil.which("copilot") or os.path.expanduser("~/.local/bin/copilot")
+         if os.path.exists(copilot_bin) or shutil.which("copilot"):
+             prompt_bytes = len(target_prompt.encode("utf-8"))
+@@ -616,19 +631,16 @@ def query_claude_engine(prompt: str, mode: str = "query", extra_args: list = Non
+ 
+     elapsed = round(time.time() - start_time, 2)
+     if output_text:
+-        # Сесійний прапорець верифікації Claude (Brain-First + /tmp)
+-        flag_content = f"CLAUDE_VERIFIED: mode={mode} provider={provider_used} elapsed={elapsed} timestamp={time.time()}\n"
+-        write_session_flag("claude_verified.flag", flag_content)
+-
+         print(f"\n> [!NOTE]")
+         print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
+-        print(f"> - **Провайдер / Модель:** Tier 4 Claude Sonnet ({provider_used})")
++        print(f"> - **Провайдер / Модель:** {provider_used}")
+         print(f"> - **Час інференсу:** {elapsed} с")
+-        print(f"> - **Отриманий вердикт / результат:** SUCCESS\n")
+-        return output_text
++        print(f"> - **Виконання:** COMPLETED; зміст вердикту оцінюється окремо\n")
++        return (output_text, provider_used, True) if return_metadata else output_text
+     else:
+         print(f"❌ Жоден із провайдерів Tier 4 Claude Sonnet не зміг відповісти за {elapsed} с.", file=sys.stderr)
+-        return "CLAUDE_ALL_PROVIDERS_FAILED"
++        failure = "CLAUDE_ALL_PROVIDERS_FAILED"
++        return (failure, "none", False) if return_metadata else failure
+ 
+ def query_copilot_engine(prompt: str, mode: str = "query", extra_args: list = None) -> str:
+     """Нативний інференс через GitHub Copilot CLI (Tier 4.5 Pre-Release Arbiter / Policy v0.9.7)."""
+@@ -1060,13 +1072,13 @@ def main():
+ 
+     # Copilot CLI (Tier 4.5 / Policy v0.9.7)
+     parser.add_argument("--copilot-query", type=str, help="Запит до GitHub Copilot CLI")
+-    parser.add_argument("--copilot-audit", type=str, help="Аудит файлу через GitHub Copilot CLI")
++    parser.add_argument("--copilot-audit", type=str, help="Заборонено для gated-аудитів; використовуйте enclave_daemon.py --audit-phase 4.5")
+     parser.add_argument("--copilot-refactor", type=str, help="Монолітний рефакторинг через GitHub Copilot CLI")
+ 
+     # Claude Sonnet Arbiter (Tier 4 / Policy v0.9.9)
+     parser.add_argument("--sonnet-query", type=str, help="Запит до Claude Sonnet (Tier 4 Arbiter)")
+-    parser.add_argument("--sonnet-audit", type=str, help="Аудит плану або коду через Claude Sonnet (Phase 2.5 Pre-Approval Gate)")
+-    parser.add_argument("--sonnet-precheck", type=str, help="Pre-Execution валідація плану та контексту через Claude Sonnet (Phase 4.2 Pre-Check Gate)")
++    parser.add_argument("--sonnet-audit", type=str, help="Заборонено для gated-аудитів; використовуйте enclave_daemon.py --audit-phase 2.5")
++    parser.add_argument("--sonnet-precheck", type=str, help="Заборонено для gated-аудитів; використовуйте enclave_daemon.py --audit-phase 4.2")
+     parser.add_argument("--precheck-context", type=str, default=None, help="Шлях до файлу зібраного контексту для Phase 4.2 Pre-Check")
+ 
+     # Семантичний контроль та детерміністичний аудит (Policy v0.9.7)
+@@ -1218,9 +1230,12 @@ def main():
+         return 0
+ 
+     if args.copilot_audit:
+-        res = query_copilot_engine(args.copilot_audit, mode="audit")
+-        print(res)
+-        return 0
++        print(
++            "ERROR: audit execution must use enclave_daemon.py with --audit-phase, "
++            "--session-id, --query-file, and --json-output.",
++            file=sys.stderr,
++        )
++        return 2
+ 
+     if args.copilot_refactor:
+         res = query_copilot_engine(args.copilot_refactor, mode="refactor")
+@@ -1239,57 +1254,21 @@ def main():
+         return 0
+ 
+     if args.sonnet_audit:
+-        print_section(f"Claude Sonnet Phase 2.5 Pre-Approval Audit: {args.sonnet_audit}")
+-        audit_content = args.sonnet_audit
+-        if os.path.isfile(args.sonnet_audit):
+-            try:
+-                with open(args.sonnet_audit, "r", encoding="utf-8") as f_aud:
+-                    audit_content = f_aud.read()
+-            except Exception as e:
+-                print(f"⚠️ Не вдалося прочитати файл для аудиту: {e}", file=sys.stderr)
+-        res = query_claude_engine(audit_content, mode="audit")
+-        print(res)
+-        return 0
++        print(
++            "ERROR: gated Phase 2.5 audits must use enclave_daemon.py with "
++            "--audit-phase 2.5, --session-id, --query-file, and --json-output.",
++            file=sys.stderr,
++        )
++        return 2
+ 
+     # 5.1. Claude Sonnet Phase 4.2 Pre-Execution Pre-Check
+     if args.sonnet_precheck:
+-        print_section(f"Claude Sonnet Phase 4.2 Pre-Check Audit Gate: {args.sonnet_precheck}")
+-        precheck_content = args.sonnet_precheck
+-        if os.path.isfile(args.sonnet_precheck):
+-            try:
+-                with open(args.sonnet_precheck, "r", encoding="utf-8", errors="replace") as f_pre:
+-                    precheck_content = f"=== IMPLEMENTATION PLAN ===\n{f_pre.read()}\n"
+-            except Exception as e:
+-                print(f"⚠️ Не вдалося прочитати файл плану для перевірки: {e}", file=sys.stderr)
+-
+-        ctx_file = getattr(args, "precheck_context", None)
+-        if ctx_file:
+-            real_ctx_path = os.path.realpath(ctx_file)
+-            if not os.path.isfile(real_ctx_path):
+-                print(f"⚠️ Помилка: Вказаний файл контексту не знайдено: {ctx_file}", file=sys.stderr)
+-            else:
+-                try:
+-                    file_size = os.path.getsize(real_ctx_path)
+-                    if file_size > 32768:
+-                        print(f"⚠️ Попередження: Розмір контексту ({file_size} Б) перевищує 32 КБ. Контекст буде обрізано.", file=sys.stderr)
+-                    with open(real_ctx_path, "r", encoding="utf-8", errors="replace") as f_ctx:
+-                        raw_ctx = f_ctx.read(32768)
+-                    sanitized_ctx = sanitize_sensitive_tokens(raw_ctx)
+-                    precheck_content += f"\n=== ASSEMBLED CONTEXT (Phase 4.1) ===\n{sanitized_ctx}\n"
+-                except Exception as e:
+-                    print(f"⚠️ Не вдалося прочитати файл контексту: {e}", file=sys.stderr)
+-        else:
+-            print("ℹ️ Режим аудиту плану без зовнішнього контексту (Phase 4.1 context file omitted).")
+-
+-        precheck_content = sanitize_sensitive_tokens(precheck_content)
+-        res = query_claude_engine(precheck_content, mode="precheck")
+-
+-        import re
+-        if re.search(r'^\s*(?:```(?:bash|sh)?\s*\n\s*)?cd\s+|(?:for\s+\w+\s+in\s+)', res, re.MULTILINE):
+-            print("⚠️ [ZERO-SHELL WARNING] У відповіді моделі виявлено спробу шелл-інструкції (cd/loop). Ігнорувати виконання!", file=sys.stderr)
+-
+-        print(res)
+-        return 0
++        print(
++            "ERROR: gated Phase 4.2 audits must use enclave_daemon.py with "
++            "--audit-phase 4.2, --session-id, --query-file, and --json-output.",
++            file=sys.stderr,
++        )
++        return 2
+ 
+     # 5.2. Deterministic Pre-Audit Gate
+     if args.pre_audit:
+diff --git a/core/hooks/pre_invocation_hook.py b/core/hooks/pre_invocation_hook.py
+index 57a2d17..cb23c04 100755
+--- a/core/hooks/pre_invocation_hook.py
++++ b/core/hooks/pre_invocation_hook.py
+@@ -76,7 +76,7 @@ def _resolve_repo_root(path):
+         curr = os.path.dirname(curr)
+     return None
+ 
+-def _build_injection(workspace_paths=None):
++def _build_injection(workspace_paths=None, conversation_id=None):
+     """Створює адаптивне повідомлення авто-старту відповідно до воркспейсу."""
+     home = os.path.expanduser("~")
+     clean_wps = [os.path.abspath(p) for p in (workspace_paths or []) if p and os.path.exists(p)]
+@@ -118,28 +118,35 @@ def _build_injection(workspace_paths=None):
+ 
+     guidance = (
+         f"{warning_banner}"
+-        "⚡ [HYBRID-IDE KERNEL v0.9.12 AUTO-START]:\n"
++        "⚡ [HYBRID-IDE KERNEL v0.9.13 AUTO-START]:\n"
+         "Сесію ініціалізовано. Регламент діє автоматично:\n"
+         "• Конституційне ядро: ~/.gemini/config/plugins/hybrid-ide/rules/AGENTS.md\n"
+         f"• Проєктний оверлей: {overlay_info}\n"
+         "• Бойова перевірка ШІ (Крок 2): python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --battle-test\n"
+         "• Фаза 1: Діагностика (лише читання; заборонено ls/find/grep, використовувати git та індекси, python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py --telemetry)\n"
+         "• Фаза 2: Репорт та implementation_plan.md (з віджетом 2D-телеметрії)\n"
+-        "• Фаза 2.5: Pre-Approval Gate — аудит плану (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <plan> --tier 4 --mode audit)\n"
+-        "• Фаза 3: Схвалення користувача (+, +!, ++)\n"
++        f"• ID поточної сесії для audit receipts: {conversation_id or 'MISSING'} (не вгадувати й не підміняти)\n"
++        "• Аудити 2.5/4.2/4.5: перед запуском показати команду; перший вивід [AUDIT START] містить реальний audit ID. Copilot CLI audit-вивід транслюється в термінал демона. Використовувати --query-file, --session-id, --audit-phase та --json-output.\n"
++        "• Phase 2.5: Claude Sonnet тільки; --tier 4 --mode audit --audit-phase 2.5. Після звіту обов'язково Request Feedback; продовжувати лише після відповіді AUDIT-REVIEWED <id> APPROVE_PLAN. Якщо потрібні зміни — AUDIT-REVIEWED <id> ALLOW_PLAN_REVISION, змінити план і повторити аудит.\n"
++        "• Phase 4.2: Claude Sonnet тільки; --tier 4 --mode precheck --audit-phase 4.2. Не запускати синтез до PASS та Request Feedback з відповіддю AUDIT-REVIEWED <id> PROCEED.\n"
++        "• Phase 4.5: Copilot CLI; --tier 4.5 --mode audit --audit-phase 4.5; єдиний failover — Claude Sonnet. READY_FOR_DEPLOY лише після PASS, перевірки звіту користувачем і відповіді AUDIT-REVIEWED <id> READY_FOR_DEPLOY на незмінний diff.\n"
++        "• Валідний звіт має AUDIT_REPORT:, змістовне тіло та один фінальний рядок AUDIT_VERDICT: PASS|CHANGES_REQUIRED|FAIL; greeting, стара атестація, порожня відповідь чи інший tier — не PASS. Не повторювати незмінний payload.\n"
++        "• Після Phase 2.5 approval створювати маркер тільки через `python3 core/verify/audit_gate.py --approve-plan --session-id <conversation_id> --audit-id <id>`; програма сама звіряє user event у transcript і прямий запис approved_plan.sha256 заборонений.\n"
++        "• Не використовувати --attest-arbiter як доказ аудиту.\n"
++        "• Фаза 3: Request Feedback exact tokens authorize each audited transition; `+` alone does not approve an audit or plan, and `++` is only for push.\n"
+         "• Фаза 4.1: Pre-Execution Context Assembly (Оркестратор Antigravity, view_file, zero-shell)\n"
+-        "• Фаза 4.2: Pre-Check Audit Gate (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <context> --tier 4 --mode precheck)\n"
++        "• Фаза 4.2: Pre-Check Audit Gate (тільки Claude Sonnet, обов'язковий user review)\n"
+         "• Фаза 4.3: Синтез коду Довіреним Анклавом (Tier 1 Ollama / Tier 2 Groq) з HMAC-паспортом Schema 1.2\n"
+         "• Фаза 4.4: Детерміністичний синтаксичний та компіляційний гейт (AST, py_compile)\n"
+-        "• Фаза 4.5: Pre-Release E2E аудит (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --query <diff> --tier 4.5 --mode audit)\n"
++        "• Фаза 4.5: Pre-Release E2E аудит (Copilot CLI, failover лише Claude Sonnet, обов'язковий user review)\n"
+         "• Фаза 5.1: Dual-Audit Report (python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py --verify-chain) та phase5_verify.py (37/37)\n"
+-        "• Фаза 5.2: Git State Seal Gate — обов'язковий автономний git commit до публікації walkthrough.md\n"
++        "• Фаза 5.2: Git State Seal Gate — commit тільки після Phase 4.5 PASS, перевірки звіту користувачем і READY_FOR_DEPLOY; push окремо вимагає ++.\n"
+         "Глобальні канонічні інструменти ядра (працюють з будь-якого каталогу):\n"
+         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/enclave_daemon.py (Єдиний ШІ-шлюз Довіреного Анклаву: Tier 1/2/4/4.5)\n"
+         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase1_inspect.py (--telemetry, 2D контекст)\n"
+         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/chat_context_auditor.py (--current-session, --strict, форензік-аудит)\n"
+         "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase4_provenance.py (--register, --verify-chain, SLSA)\n"
+-        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (верифікація 40 unit + 10 auditor + 37/37)\n"
++        "  - python3 ~/.gemini/config/plugins/hybrid-ide/bin/phase5_verify.py (локальна верифікація)\n"
+         "  - ~/.gemini/config/plugins/hybrid-ide/bin/ENCLAVE_INTERFACE.md (інструментальний контракт Анклаву)\n"
+         "У репозиторії Hybrid-IDE інструменти також доступні локально в core/."
+     )
+@@ -179,7 +186,7 @@ def main():
+             _create_telemetry_flags(brain_state_dir)
+ 
+         if invocation_num == 1:
+-            output = _build_injection(workspace_paths)
++            output = _build_injection(workspace_paths, conversation_id)
+         else:
+             output = {}
+ 
+diff --git a/core/hooks/pre_tool_hook.py b/core/hooks/pre_tool_hook.py
+index 7f8eadd..7135fe0 100755
+--- a/core/hooks/pre_tool_hook.py
++++ b/core/hooks/pre_tool_hook.py
+@@ -111,6 +111,67 @@ def verify_contributor_plan_sanction(brain_state_dir: str, abs_target: str, base
+ 
+     return False
+ 
++
++def _audit_gate_functions():
++    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
++    if repo_root not in sys.path:
++        sys.path.insert(0, repo_root)
++    try:
++        from core.verify.audit_gate import load_latest_audit, transcript_confirms
++        return load_latest_audit, transcript_confirms
++    except Exception as exc:
++        log(f"audit gate import failed: {exc}")
++        return None, None
++
++
++def _audit_review_ok(
++    brain_state_dir: str,
++    transcript_path: str,
++    phase: str,
++    action: str,
++    verdict: str = "PASS",
++) -> bool:
++    if not brain_state_dir or not transcript_path:
++        return False
++    load_latest_audit, transcript_confirms = _audit_gate_functions()
++    if not load_latest_audit or not transcript_confirms:
++        return False
++    session_id = os.path.basename(os.path.dirname(brain_state_dir))
++    try:
++        receipt = load_latest_audit(session_id, phase)
++    except (OSError, ValueError):
++        return False
++    return (
++        receipt.get("execution") == "COMPLETED"
++        and (verdict is None or receipt.get("verdict") == verdict)
++        and transcript_confirms(transcript_path, receipt.get("audit_id", ""), action)
++    )
++
++
++def _audit_diff_matches(brain_state_dir: str, session_id: str, cwd: str) -> bool:
++    load_latest_audit, _ = _audit_gate_functions()
++    if not load_latest_audit:
++        return False
++    try:
++        receipt = load_latest_audit(session_id, "4.5")
++        if receipt.get("execution") != "COMPLETED" or receipt.get("verdict") != "PASS":
++            return False
++        status = subprocess.run(
++            ["git", "-C", cwd, "status", "--porcelain=v1", "--untracked-files=all"],
++            capture_output=True, text=True, timeout=10, check=False,
++        )
++        if status.returncode != 0 or any(line.startswith("??") for line in status.stdout.splitlines()):
++            return False
++        diff = subprocess.run(
++            ["git", "-C", cwd, "diff", "--binary", "HEAD"],
++            capture_output=True, timeout=10, check=False,
++        )
++        if diff.returncode != 0:
++            return False
++        return hashlib.sha256(diff.stdout).hexdigest() == receipt.get("subject_sha256")
++    except (OSError, subprocess.SubprocessError, ValueError):
++        return False
++
+ def main():
+     try:
+         raw = sys.stdin.read()
+@@ -166,6 +227,15 @@ def main():
+             os.makedirs(brain_state_dir, exist_ok=True)
+         except Exception:
+             pass
++    transcript_path = None
++    if brain_state_dir:
++        candidate = os.path.join(brain_state_dir, "logs", "transcript.jsonl")
++        if os.path.isfile(candidate):
++            transcript_path = candidate
++    if not transcript_path and conv_id:
++        candidate = os.path.join(brain_root, str(conv_id), "transcript.jsonl")
++        if os.path.isfile(candidate):
++            transcript_path = candidate
+ 
+     # Brain-First ізольовані шляхи стану
+     brain_phase4_flag = os.path.join(brain_state_dir, "phase4_active.flag") if brain_state_dir else None
+@@ -205,6 +275,29 @@ def main():
+     # ============================================================
+     if name == "run_command":
+         cmd_line = args.get("CommandLine", "")
++        normalized_cmd = cmd_line.replace("\\", "/").lower()
++        is_release_command = (
++            re.search(r"\bgit\s+(?:commit|push)\b", normalized_cmd)
++            or "push_to_github.sh" in normalized_cmd
++        )
++        if is_release_command:
++            cwd = args.get("Cwd") or (workspace_paths[0] if workspace_paths else os.getcwd())
++            if (
++                not _audit_review_ok(
++                    brain_state_dir, transcript_path, "4.5", "READY_FOR_DEPLOY"
++                )
++                or not _audit_diff_matches(brain_state_dir, str(conv_id), cwd)
++            ):
++                log("HARD DENY: release command lacks reviewed, current Phase 4.5 PASS receipt")
++                print(json.dumps({
++                    "decision": "deny",
++                    "reason": (
++                        "Phase 4.5 release gate: run Copilot CLI audit (Claude Sonnet failover only), "
++                        "review its report in Request Feedback, select "
++                        "'AUDIT-REVIEWED <audit_id> READY_FOR_DEPLOY', and keep the audited diff unchanged."
++                    )
++                }))
++                return
+ 
+         # Авто-актуалізація прапорця телеметрії при запуску phase1_inspect.py --telemetry
+         if "phase1_inspect.py" in cmd_line and "--telemetry" in cmd_line:
+@@ -402,7 +495,10 @@ def main():
+             "provenance_ledger",
+             ".core_master_hmac.secret",
+             ".system_generated/flags",
+-            "approved_plan.sha256"
++            "approved_plan.sha256",
++            ".system_generated/logs",
++            "transcript.jsonl",
++            ".system_generated/audits",
+         )
+         has_protected_ref = any(target in norm_cmd for target in protected_shell_targets) or (".secret" in norm_cmd)
+         if has_protected_ref:
+@@ -877,7 +973,11 @@ def main():
+             )
+             is_flag_state = (
+                 "/.system_generated/flags/" in normalized or
+-                normalized.endswith("/.system_generated/flags")
++                normalized.endswith("/.system_generated/flags") or
++                normalized.endswith("/.system_generated/approved_plan.sha256") or
++                "/.system_generated/logs/" in normalized or
++                normalized.endswith("/transcript.jsonl") or
++                "/.system_generated/audits/" in normalized
+             )
+             
+             if is_ledger_file or is_secret_file or is_flag_state:
+@@ -901,6 +1001,89 @@ def main():
+             controlled_code_exts = (".py", ".sh", ".bash", ".ts", ".js", ".pas", ".cpp", ".h", ".go", ".rs", ".java", ".psc")
+             is_code_file = any(normalized.endswith(ext) for ext in controlled_code_exts)
+             is_plan_artifact = base_name == "implementation_plan.md"
++            is_approval_marker = base_name == "approved_plan.sha256"
++
++            if is_approval_marker:
++                log(f"HARD DENY: direct write to approval marker via {name}")
++                print(json.dumps({
++                    "decision": "deny",
++                    "reason": "approved_plan.sha256 is written only by audit_gate.py after verified user Request Feedback."
++                }))
++                return
++
++            if is_plan_artifact and brain_state_dir:
++                approval_path = os.path.join(brain_state_dir, "approved_plan.sha256")
++                if os.path.isfile(approval_path):
++                    if not _audit_review_ok(
++                        brain_state_dir, transcript_path, "2.5",
++                        "ALLOW_PLAN_REVISION", verdict=None,
++                    ):
++                        log("HARD DENY: approved implementation plan change lacks explicit user review")
++                        print(json.dumps({
++                            "decision": "deny",
++                            "reason": (
++                                "The approved implementation plan is immutable. Request Feedback "
++                                "for the current Phase 2.5 audit and require "
++                                "'AUDIT-REVIEWED <audit_id> ALLOW_PLAN_REVISION' before editing it."
++                            )
++                        }))
++                        return
++                    try:
++                        os.remove(approval_path)
++                    except OSError as exc:
++                        log(f"cannot invalidate plan approval: {exc}")
++                        print(json.dumps({"decision": "deny", "reason": "Could not invalidate old plan approval."}))
++                        return
++
++            if is_plan_artifact and brain_state_dir:
++                load_latest_audit, _ = _audit_gate_functions()
++                if load_latest_audit:
++                    try:
++                        pending = load_latest_audit(os.path.basename(os.path.dirname(brain_state_dir)), "2.5")
++                    except (OSError, ValueError):
++                        pending = {}
++                    if pending and not _audit_review_ok(
++                        brain_state_dir, transcript_path, "2.5",
++                        "ALLOW_PLAN_REVISION", verdict=None,
++                    ):
++                        log("HARD DENY: plan changed before Phase 2.5 report was reviewed")
++                        print(json.dumps({
++                            "decision": "deny",
++                            "reason": (
++                                f"Phase 2.5 audit {pending.get('audit_id')} is awaiting user review. "
++                                "Do not revise the plan until the user explicitly selects "
++                                f"'AUDIT-REVIEWED {pending.get('audit_id')} ALLOW_PLAN_REVISION'."
++                            )
++                        }))
++                        return
++
++            if is_code_file:
++                approved_plan_path = os.path.join(brain_state_dir, "approved_plan.sha256") if brain_state_dir else None
++                plan_path = os.path.join(os.path.dirname(brain_state_dir), "implementation_plan.md") if brain_state_dir else None
++                plan_is_approved = False
++                if approved_plan_path and plan_path and os.path.isfile(approved_plan_path) and os.path.isfile(plan_path):
++                    try:
++                        with open(plan_path, "rb") as plan_stream:
++                            current_sha = hashlib.sha256(plan_stream.read()).hexdigest()
++                        with open(approved_plan_path, "r", encoding="ascii") as approval_stream:
++                            plan_is_approved = approval_stream.read().strip() == current_sha
++                    except OSError:
++                        plan_is_approved = False
++                if (
++                    not plan_is_approved
++                    or not _audit_review_ok(brain_state_dir, transcript_path, "2.5", "APPROVE_PLAN")
++                    or not _audit_review_ok(brain_state_dir, transcript_path, "4.2", "PROCEED")
++                ):
++                    log(f"HARD DENY: code mutation lacks current approved plan and reviewed Phase 4.2 report: {target_file}")
++                    print(json.dumps({
++                        "decision": "deny",
++                        "reason": (
++                            "Code changes require an unchanged Phase 2.5 PASS plan approved via "
++                            "Request Feedback and a reviewed Phase 4.2 PASS report. Direct writes to "
++                            "approved_plan.sha256 are blocked."
++                        )
++                    }))
++                    return
+ 
+             if is_plan_artifact or is_code_file:
+                 has_telemetry = False
+diff --git a/core/verify/phase5_verify.py b/core/verify/phase5_verify.py
+index d79500a..826c550 100644
+--- a/core/verify/phase5_verify.py
++++ b/core/verify/phase5_verify.py
+@@ -107,7 +107,15 @@ def main():
+                 sys.stderr.write("❌ Provenance Security Unit Tests Failed!\n")
+                 sys.exit(res_prov.returncode)
+ 
+-        # 1.7. Run Chat Context Auditor tests and active session audit (Kernel v0.9.12)
++        # 1.7. Run strict audit report, receipt, and approval gate tests.
++        audit_gate_test_path = os.path.join(REPO_ROOT, 'core', 'verify', 'test_audit_gate.py')
++        if os.path.isfile(audit_gate_test_path):
++            res_audit_gate = subprocess.run([sys.executable, "-m", "unittest", "core.verify.test_audit_gate"], cwd=REPO_ROOT)
++            if res_audit_gate.returncode != 0:
++                sys.stderr.write("❌ Audit Gate Unit Tests Failed!\n")
++                sys.exit(res_audit_gate.returncode)
++
++        # 1.8. Run Chat Context Auditor tests and active session audit (Kernel v0.9.12)
+         chat_test_path = os.path.join(REPO_ROOT, 'core', 'verify', 'test_chat_context_auditor.py')
+         if os.path.isfile(chat_test_path):
+             res_chat_test = subprocess.run([sys.executable, "-m", "unittest", "core.verify.test_chat_context_auditor"], cwd=REPO_ROOT)
+diff --git a/core/verify/test_provenance_security.py b/core/verify/test_provenance_security.py
+index 191ed8e..3ecad22 100644
+--- a/core/verify/test_provenance_security.py
++++ b/core/verify/test_provenance_security.py
+@@ -490,6 +490,42 @@ class TestProvenanceSecurity(unittest.TestCase):
+         self.assertEqual(out.get("decision"), "deny")
+         self.assertIn("Ledger Immutability Gate", out.get("reason", ""))
+ 
++    def test_audit_transcript_receipts_and_plan_marker_are_immutable(self):
++        hook_path = os.path.join(REPO_ROOT, "core", "hooks", "pre_tool_hook.py")
++        home = os.path.join(self.test_dir, "home")
++        session_id = "audit-state-session"
++        artifact_dir = os.path.join(
++            home, ".gemini", "antigravity", "brain", session_id
++        )
++        state_dir = os.path.join(artifact_dir, ".system_generated")
++        os.makedirs(os.path.join(state_dir, "logs"), exist_ok=True)
++        os.makedirs(os.path.join(state_dir, "audits"), exist_ok=True)
++        protected_paths = [
++            os.path.join(state_dir, "logs", "transcript.jsonl"),
++            os.path.join(state_dir, "audits", "audit-001.json"),
++            os.path.join(state_dir, "approved_plan.sha256"),
++        ]
++        env = dict(os.environ, HOME=home)
++
++        for target in protected_paths:
++            payload = {
++                "toolCall": {
++                    "name": "write_to_file",
++                    "args": {"TargetFile": target, "CodeContent": "forged"},
++                },
++                "conversationId": session_id,
++                "artifactDirectoryPath": artifact_dir,
++            }
++            proc = subprocess.run(
++                [sys.executable, hook_path],
++                input=json.dumps(payload),
++                text=True,
++                capture_output=True,
++                env=env,
++            )
++            self.assertEqual(proc.returncode, 0)
++            self.assertEqual(json.loads(proc.stdout).get("decision"), "deny", target)
++
+     def test_passport_hmac_signature_minted_and_applied(self):
+         """20. Паспорт при випуску підписується HMAC, а при переході в APPLIED коректно перепідписується."""
+         p_id = mint_passport(
+@@ -862,17 +898,11 @@ class TestProvenanceSecurity(unittest.TestCase):
+         self.assertIn("status", results["tier_4_5_copilot"])
+ 
+     def test_enclave_antigravity_pool_attestation(self):
+-        """38. Анклав: атестація арбітра через Antigravity Pool (POST /attest) та фіксація прапорця."""
++        """38. Самодекларація арбітра не створює доказ аудиту."""
+         res = attest_arbiter(verdict="PASS", arbiter="Antigravity Pool (Claude Sonnet)")
+-        self.assertEqual(res.get("status"), "SUCCESS")
++        self.assertEqual(res.get("status"), "RECORDED_NOT_VERIFIED")
+         self.assertEqual(res.get("verdict"), "PASS")
+-        self.assertIn("flag_file", res)
+-        flag_path = res.get("flag_file")
+-        self.assertTrue(os.path.exists(flag_path))
+-        with open(flag_path, "r", encoding="utf-8") as f:
+-            flag_text = f.read()
+-        self.assertIn("CLAUDE_VERIFIED", flag_text)
+-        self.assertIn("Antigravity Pool", flag_text)
++        self.assertFalse(res.get("verified"))
+ 
+     def test_enclave_tools_help_schema(self):
+         """39. Анклав: ендпоінт /help-tools повертає вичерпну схему інструментів для Antigravity."""
+@@ -887,6 +917,71 @@ class TestProvenanceSecurity(unittest.TestCase):
+         self.assertIn("GET /verify-chain", endpoints)
+         self.assertIn("POST /attest", endpoints)
+ 
++    def test_audit_routing_is_fail_closed_and_ignores_stale_attestation(self):
++        import core.enclave.enclave_daemon as ed
++
++        report = (
++            "AUDIT_REPORT:\n"
++            "Summary: The reviewed artifact is complete and consistent with scope.\n"
++            "Findings: No blocking issues found; the requested verification evidence is present.\n"
++            "AUDIT_VERDICT: PASS"
++        )
++        claude = mock.Mock(return_value=(report, "Anthropic API (Claude Sonnet)", True))
++        with mock.patch.object(ed, "_resolve_core_imports", return_value=(None, {"query_claude": claude})), \
++                mock.patch.object(ed, "direct_query_copilot", return_value=("COPILOT_TIMEOUT", True)), \
++                mock.patch.object(ed, "direct_query_openrouter", return_value="OPENROUTER_ERROR"), \
++                mock.patch.object(ed, "direct_query_groq", return_value="GROQ_ERROR"):
++            result, model, tier = ed.query_all_tier_ai("audit payload", tier=4.5, mode="audit")
++        self.assertEqual((result, tier), (report, 4))
++        self.assertIn("Anthropic API", model)
++        claude.assert_called_once()
++
++        failed_claude = mock.Mock(return_value=("CLAUDE_ALL_PROVIDERS_FAILED", "none", False))
++        with mock.patch.object(ed, "_resolve_core_imports", return_value=(None, {"query_claude": failed_claude})), \
++                mock.patch.object(ed, "direct_query_copilot", return_value=("COPILOT_TIMEOUT", True)), \
++                mock.patch.object(ed, "direct_query_groq") as groq, \
++                mock.patch.object(ed, "direct_query_openrouter") as openrouter:
++            result, model, tier = ed.query_all_tier_ai("audit payload", tier=4.5, mode="audit")
++        self.assertTrue(result.startswith("ERROR:"))
++        self.assertEqual((model, tier), ("none", 0))
++        groq.assert_not_called()
++        openrouter.assert_not_called()
++
++    def test_audit_query_requires_structured_report_and_blocks_identical_repeat(self):
++        import core.enclave.enclave_daemon as ed
++        import core.verify.audit_gate as audit_gate
++
++        report = (
++            "AUDIT_REPORT:\n"
++            "Summary: The proposed implementation has clear scope and measurable tests.\n"
++            "Findings: No blocking issues found; the plan and risks are explicitly covered.\n"
++            "AUDIT_VERDICT: PASS"
++        )
++        with mock.patch.object(audit_gate, "session_state_dir", return_value=self.sg_dir), \
++                mock.patch.object(ed, "query_all_tier_ai", return_value=(report, "claude-sonnet", 4)) as query:
++            result = ed.enclave_query(
++                "Plan text", tier=4, mode="audit", audit_phase="2.5",
++                session_id=self.session_id, subject_sha256="plan-sha",
++            )
++            self.assertEqual(result["status"], "AUDIT_REVIEW_REQUIRED")
++            self.assertEqual(result["verdict"], "PASS")
++            self.assertFalse(result["ready_for_deploy"])
++            self.assertIn(result["audit_id"], result["required_user_response"])
++            duplicate = ed.enclave_query(
++                "Plan text", tier=4, mode="audit", audit_phase="2.5",
++                session_id=self.session_id, subject_sha256="plan-sha",
++            )
++            self.assertEqual(duplicate["status"], "ERROR")
++            query.assert_called_once()
++
++        with mock.patch.object(audit_gate, "session_state_dir", return_value=self.sg_dir), \
++                mock.patch.object(ed, "query_all_tier_ai", return_value=("Hello, I can help.", "claude-sonnet", 4)):
++            invalid = ed.enclave_query(
++                "Other plan", tier=4, mode="audit", audit_phase="2.5",
++                session_id=self.session_id,
++            )
++        self.assertEqual(invalid["status"], "AUDIT_INVALID_REPORT")
++
+     def test_enclave_cli_apply_contract(self):
+         import core.enclave.enclave_daemon as ed
+ 
+@@ -1038,6 +1133,21 @@ class TestProvenanceSecurity(unittest.TestCase):
+         ans, used_model, used_tier = query_all_tier_ai("Test audit prompt", tier=4.5)
+         self.assertIn(used_tier, (4, 4.5, 2))
+ 
++    def test_copilot_audit_output_is_streamed_to_terminal(self):
++        import core.enclave.enclave_daemon as ed
++
++        executable = os.path.join(self.test_dir, "fake-copilot")
++        with open(executable, "w", encoding="utf-8") as stream:
++            stream.write("#!/bin/sh\nprintf 'AUDITOR_VISIBLE_OUTPUT\\n'\n")
++        os.chmod(executable, 0o700)
++        visible = io.StringIO()
++        with mock.patch.object(ed.shutil, "which", return_value=executable), \
++                contextlib.redirect_stdout(visible):
++            output, quota_exceeded = direct_query_copilot("audit prompt", mode="audit")
++        self.assertFalse(quota_exceeded)
++        self.assertEqual(output, "AUDITOR_VISIBLE_OUTPUT")
++        self.assertIn("AUDITOR_VISIBLE_OUTPUT", visible.getvalue())
++
+     def test_verify_provenance_schema_1_2(self):
+         """41. Провененс: верифікація файлу, хешу та коміту за паспортами Schema 1.2 (без залежності від legacy_files)."""
+         model = "qwen2.5-coder:1.5b"
+diff --git a/core/verify/audit_gate.py b/core/verify/audit_gate.py
+new file mode 100644
+index 0000000..1e87c29
+--- /dev/null
++++ b/core/verify/audit_gate.py
+@@ -0,0 +1,291 @@
++#!/usr/bin/env python3
++# -*- coding: utf-8 -*-
++"""Deterministic audit report and user-review primitives for Antigravity."""
++
++import hashlib
++import json
++import os
++import re
++import sys
++import tempfile
++import uuid
++from datetime import datetime, timezone
++
++sys.dont_write_bytecode = True
++
++AUDIT_PHASES = {"2.5", "4.2", "4.5"}
++AUDIT_VERDICTS = {"PASS", "CHANGES_REQUIRED", "FAIL"}
++
++
++def parse_audit_report(response: str) -> tuple[str, str]:
++    """Return a verdict only for an explicitly structured, substantive report."""
++    if not isinstance(response, str):
++        return "INVALID_REPORT", "Auditor returned no text."
++
++    verdicts = list(re.finditer(
++        r"(?m)^\s*AUDIT_VERDICT:\s*(PASS|CHANGES_REQUIRED|FAIL)\s*$",
++        response,
++    ))
++    reports = list(re.finditer(r"(?m)^\s*AUDIT_REPORT:\s*$", response))
++    if len(verdicts) != 1 or len(reports) != 1 or reports[0].end() >= len(response):
++        return "INVALID_REPORT", "Missing AUDIT_VERDICT or AUDIT_REPORT section."
++
++    verdict_match = verdicts[0]
++    report_match = reports[0]
++    if (
++        response[:report_match.start()].strip()
++        or report_match.start() >= verdict_match.start()
++        or response[verdict_match.end():].strip()
++    ):
++        return "INVALID_REPORT", "Report must start with AUDIT_REPORT and end with one AUDIT_VERDICT."
++
++    report = response[report_match.end():verdict_match.start()].strip()
++    if len(report) < 80:
++        return "INVALID_REPORT", "Audit report is too short to review."
++
++    verdict = verdict_match.group(1)
++    if verdict not in AUDIT_VERDICTS:
++        return "INVALID_REPORT", "Unsupported audit verdict."
++    return verdict, report
++
++
++def session_state_dir(session_id: str) -> str:
++    """Resolve an explicit Antigravity conversation ID to its isolated state dir."""
++    if not isinstance(session_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", session_id):
++        raise ValueError("A valid Antigravity conversation ID is required for audit state.")
++    brain_root = os.path.realpath(os.path.expanduser("~/.gemini/antigravity/brain"))
++    session_dir = os.path.realpath(os.path.join(brain_root, session_id))
++    if os.path.commonpath((brain_root, session_dir)) != brain_root or session_dir == brain_root:
++        raise ValueError("Conversation ID resolves outside the Antigravity brain directory.")
++    return os.path.join(session_dir, ".system_generated")
++
++
++def audit_directory(session_id: str) -> str:
++    path = os.path.join(session_state_dir(session_id), "audits")
++    os.makedirs(path, mode=0o700, exist_ok=True)
++    os.chmod(path, 0o700)
++    return path
++
++
++def _atomic_json_write(path: str, payload: dict):
++    directory = os.path.dirname(path)
++    fd, temp_path = tempfile.mkstemp(prefix=".audit-", dir=directory)
++    try:
++        with os.fdopen(fd, "w", encoding="utf-8") as stream:
++            json.dump(payload, stream, ensure_ascii=False, indent=2)
++            stream.write("\n")
++            stream.flush()
++            os.fsync(stream.fileno())
++        os.replace(temp_path, path)
++    except Exception:
++        try:
++            os.unlink(temp_path)
++        except OSError:
++            pass
++        raise
++
++
++def ensure_new_audit_payload(session_id: str, phase: str, request: str):
++    if phase not in AUDIT_PHASES:
++        raise ValueError(f"Unsupported audit phase: {phase}")
++    request_sha = hashlib.sha256(request.encode("utf-8")).hexdigest()
++    directory = audit_directory(session_id)
++    for name in os.listdir(directory):
++        if not name.endswith(".json"):
++            continue
++        try:
++            with open(os.path.join(directory, name), "r", encoding="utf-8") as stream:
++                existing = json.load(stream)
++        except (OSError, json.JSONDecodeError):
++            continue
++        if (
++            existing.get("phase") == phase
++            and existing.get("request_sha256") == request_sha
++            and existing.get("execution") == "COMPLETED"
++        ):
++            raise ValueError(
++                f"Unchanged audit payload already executed as {existing.get('audit_id')}; "
++                "revise the input or explicitly request a retry."
++            )
++
++
++def record_audit(
++    session_id: str,
++    phase: str,
++    request: str,
++    response: str,
++    auditor: str,
++    execution: str,
++    verdict: str,
++    audit_id: str = None,
++    subject_sha256: str = None,
++) -> dict:
++    if phase not in AUDIT_PHASES:
++        raise ValueError(f"Unsupported audit phase: {phase}")
++
++    directory = audit_directory(session_id)
++    request_sha = hashlib.sha256(request.encode("utf-8")).hexdigest()
++    ensure_new_audit_payload(session_id, phase, request)
++    audit_id = audit_id or uuid.uuid4().hex
++    receipt = {
++        "schema": "hybrid-ide-audit-receipt-v1",
++        "audit_id": audit_id,
++        "session_id": session_id,
++        "phase": phase,
++        "auditor": auditor,
++        "execution": execution,
++        "verdict": verdict,
++        "request_sha256": request_sha,
++        "subject_sha256": subject_sha256,
++        "response_sha256": hashlib.sha256(response.encode("utf-8")).hexdigest(),
++        "report": response,
++        "created_at": datetime.now(timezone.utc).isoformat(),
++    }
++    _atomic_json_write(os.path.join(directory, f"{audit_id}.json"), receipt)
++    _atomic_json_write(os.path.join(directory, "latest.json"), receipt)
++    return receipt
++
++
++def _user_request_text(content: str) -> str:
++    if not isinstance(content, str):
++        return ""
++    match = re.search(r"<USER_REQUEST>(.*?)</USER_REQUEST>", content, re.DOTALL)
++    return match.group(1).strip() if match else content.strip()
++
++
++def transcript_confirms(
++    transcript_path: str,
++    audit_id: str,
++    action: str,
++) -> bool:
++    if action not in {
++        "APPROVE_PLAN", "PROCEED", "READY_FOR_DEPLOY",
++        "ALLOW_PLAN_REVISION", "ALLOW_FIXES", "REVIEW_FINDINGS", "RETRY",
++    }:
++        return False
++    if not transcript_path or not os.path.isfile(transcript_path):
++        return False
++
++    expected = f"AUDIT-REVIEWED {audit_id} {action}"
++    try:
++        with open(transcript_path, "r", encoding="utf-8", errors="replace") as stream:
++            for line in stream:
++                try:
++                    record = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                if record.get("type") == "USER_INPUT" and record.get("source") == "USER_EXPLICIT":
++                    if _user_request_text(record.get("content", "")) == expected:
++                        return True
++    except OSError:
++        return False
++    return False
++
++
++def load_latest_audit(session_id: str, phase: str = None) -> dict:
++    directory = audit_directory(session_id)
++    if phase is None:
++        path = os.path.join(directory, "latest.json")
++    else:
++        receipts = []
++        for name in os.listdir(directory):
++            if not name.endswith(".json") or name == "latest.json":
++                continue
++            try:
++                with open(os.path.join(directory, name), "r", encoding="utf-8") as stream:
++                    receipt = json.load(stream)
++                if receipt.get("phase") == phase:
++                    receipts.append(receipt)
++            except (OSError, json.JSONDecodeError):
++                continue
++        receipts.sort(key=lambda item: item.get("created_at", ""))
++        return receipts[-1] if receipts else {}
++    try:
++        with open(path, "r", encoding="utf-8") as stream:
++            receipt = json.load(stream)
++        return receipt if isinstance(receipt, dict) else {}
++    except (OSError, json.JSONDecodeError):
++        return {}
++
++
++def session_transcript_path(session_id: str) -> str:
++    session_dir = os.path.dirname(session_state_dir(session_id))
++    candidates = (
++        os.path.join(session_dir, ".system_generated", "logs", "transcript.jsonl"),
++        os.path.join(session_dir, "transcript.jsonl"),
++    )
++    return next((path for path in candidates if os.path.isfile(path)), "")
++
++
++def approve_plan_from_user_feedback(session_id: str, audit_id: str) -> str:
++    receipt = load_latest_audit(session_id, "2.5")
++    if receipt.get("audit_id") != audit_id or receipt.get("phase") != "2.5":
++        raise ValueError("The latest audit receipt is not the requested Phase 2.5 run.")
++    if receipt.get("execution") != "COMPLETED" or receipt.get("verdict") != "PASS":
++        raise ValueError("Only a completed Phase 2.5 PASS report can approve a plan.")
++    if not transcript_confirms(session_transcript_path(session_id), audit_id, "APPROVE_PLAN"):
++        raise ValueError("No matching user Request Feedback approval was found in the session transcript.")
++
++    state_dir = session_state_dir(session_id)
++    plan_path = os.path.join(os.path.dirname(state_dir), "implementation_plan.md")
++    if not os.path.isfile(plan_path):
++        raise ValueError("The session implementation_plan.md was not found.")
++    with open(plan_path, "rb") as stream:
++        plan_sha = hashlib.sha256(stream.read()).hexdigest()
++    if receipt.get("subject_sha256") != plan_sha:
++        raise ValueError("The implementation plan changed after the audited payload.")
++
++    approval_path = os.path.join(state_dir, "approved_plan.sha256")
++    fd, temp_path = tempfile.mkstemp(prefix=".approved-plan-", dir=state_dir)
++    try:
++        with os.fdopen(fd, "w", encoding="ascii") as stream:
++            stream.write(plan_sha + "\n")
++            stream.flush()
++            os.fsync(stream.fileno())
++        os.replace(temp_path, approval_path)
++    except Exception:
++        try:
++            os.unlink(temp_path)
++        except OSError:
++            pass
++        raise
++    return plan_sha
++
++
++def main():
++    import argparse
++
++    parser = argparse.ArgumentParser(description="Validate or inspect an audit report.")
++    parser.add_argument("--validate-report", help="Path to a text audit response.")
++    parser.add_argument("--approve-plan", action="store_true", help="Approve the exact Phase 2.5 plan after user feedback.")
++    parser.add_argument("--session-id", help="Antigravity conversation ID.")
++    parser.add_argument("--audit-id", help="Audit receipt ID to review.")
++    args = parser.parse_args()
++    if args.approve_plan:
++        if not (args.session_id and args.audit_id):
++            parser.error("--approve-plan requires --session-id and --audit-id")
++        try:
++            plan_sha = approve_plan_from_user_feedback(args.session_id, args.audit_id)
++        except (OSError, ValueError) as exc:
++            print(f"PLAN_APPROVAL: DENIED: {exc}", file=sys.stderr)
++            return 2
++        print(f"PLAN_APPROVAL: APPROVED sha256={plan_sha}")
++        return 0
++    if not args.validate_report:
++        parser.error("--validate-report is required")
++    try:
++        with open(args.validate_report, "r", encoding="utf-8") as stream:
++            verdict, report = parse_audit_report(stream.read())
++    except OSError as exc:
++        print(f"AUDIT_EXECUTION: ERROR: {exc}", file=sys.stderr)
++        return 2
++    print(f"AUDIT_VERDICT: {verdict}")
++    if verdict == "INVALID_REPORT":
++        print(report, file=sys.stderr)
++        return 2
++    return 0 if verdict == "PASS" else 1
++
++
++if __name__ == "__main__":
++    import sys
++    sys.exit(main())
+diff --git a/core/verify/test_audit_gate.py b/core/verify/test_audit_gate.py
+new file mode 100644
+index 0000000..2d65d95
+--- /dev/null
++++ b/core/verify/test_audit_gate.py
+@@ -0,0 +1,153 @@
++#!/usr/bin/env python3
++import hashlib
++import json
++import os
++import sys
++import tempfile
++import unittest
++
++sys.dont_write_bytecode = True
++
++from core.verify.audit_gate import (
++    approve_plan_from_user_feedback,
++    ensure_new_audit_payload,
++    parse_audit_report,
++    record_audit,
++    transcript_confirms,
++)
++
++
++class TestAuditGate(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.old_home = os.environ.get("HOME")
++        os.environ["HOME"] = self.tmp.name
++        self.session_id = "conversation-123"
++        self.report = (
++            "AUDIT_REPORT:\n"
++            "Summary: The plan addresses the requested work and its known risks.\n"
++            "Findings: No blocking issues found. Verification scope is stated and "
++            "the proposal remains limited to the approved files.\n"
++            "AUDIT_VERDICT: PASS"
++        )
++
++    def tearDown(self):
++        if self.old_home is None:
++            os.environ.pop("HOME", None)
++        else:
++            os.environ["HOME"] = self.old_home
++        self.tmp.cleanup()
++
++    def test_unstructured_or_short_model_output_is_not_a_verdict(self):
++        self.assertEqual(parse_audit_report("Hello, I can help.")[0], "INVALID_REPORT")
++        self.assertEqual(
++            parse_audit_report("AUDIT_VERDICT: PASS\nAUDIT_REPORT:\nLooks good.")[0],
++            "INVALID_REPORT",
++        )
++        self.assertEqual(
++            parse_audit_report(
++                "AUDIT_REPORT:\n" + ("Substantive audit content. " * 5)
++                + "\nAUDIT_VERDICT: PASS\nAUDIT_VERDICT: PASS"
++            )[0],
++            "INVALID_REPORT",
++        )
++        self.assertEqual(
++            parse_audit_report("Hello!\n" + self.report)[0],
++            "INVALID_REPORT",
++        )
++
++    def test_explicit_report_verdict_is_parsed(self):
++        verdict, report = parse_audit_report(self.report)
++        self.assertEqual(verdict, "PASS")
++        self.assertIn("Findings:", report)
++
++    def test_receipt_is_session_scoped_and_duplicate_payload_is_rejected(self):
++        receipt = record_audit(
++            self.session_id, "2.5", "plan content", self.report,
++            "Claude Sonnet", "COMPLETED", "PASS", audit_id="audit-001",
++        )
++        self.assertEqual(receipt["audit_id"], "audit-001")
++        receipt_dir = os.path.join(
++            self.tmp.name, ".gemini", "antigravity", "brain",
++            self.session_id, ".system_generated", "audits",
++        )
++        with open(os.path.join(receipt_dir, "latest.json"), encoding="utf-8") as stream:
++            saved = json.load(stream)
++        self.assertEqual(saved["request_sha256"], receipt["request_sha256"])
++        with self.assertRaisesRegex(ValueError, "Unchanged audit payload"):
++            ensure_new_audit_payload(self.session_id, "2.5", "plan content")
++        ensure_new_audit_payload(self.session_id, "4.5", "plan content")
++
++    def test_confirmation_requires_exact_user_input(self):
++        transcript = os.path.join(self.tmp.name, "transcript.jsonl")
++        records = [
++            {"type": "USER_INPUT", "source": "USER_EXPLICIT",
++             "content": "<USER_REQUEST>AUDIT-REVIEWED audit-001 APPROVE_PLAN</USER_REQUEST>"},
++            {"type": "USER_INPUT", "source": "USER_EXPLICIT", "content": "continue"},
++        ]
++        with open(transcript, "w", encoding="utf-8") as stream:
++            for record in records:
++                stream.write(json.dumps(record) + "\n")
++        self.assertTrue(transcript_confirms(transcript, "audit-001", "APPROVE_PLAN"))
++        self.assertFalse(transcript_confirms(transcript, "different-audit", "APPROVE_PLAN"))
++        with open(transcript, "a", encoding="utf-8") as stream:
++            stream.write(json.dumps(records[0]) + "\n")
++        self.assertTrue(transcript_confirms(transcript, "audit-001", "APPROVE_PLAN"))
++
++    def test_unknown_confirmation_action_is_rejected(self):
++        self.assertFalse(transcript_confirms("/missing", "audit-001", "APPROVE"))
++
++    def test_session_id_cannot_escape_brain_directory(self):
++        with self.assertRaises(ValueError):
++            record_audit("../other", "2.5", "p", self.report, "Claude", "COMPLETED", "PASS")
++
++    def test_plan_approval_requires_matching_pass_receipt_and_user_event(self):
++        brain_root = os.path.join(self.tmp.name, ".gemini", "antigravity", "brain")
++        session_dir = os.path.join(brain_root, self.session_id)
++        state_dir = os.path.join(session_dir, ".system_generated")
++        os.makedirs(state_dir)
++        plan_path = os.path.join(session_dir, "implementation_plan.md")
++        plan = b"Plan revision 1\n"
++        with open(plan_path, "wb") as stream:
++            stream.write(plan)
++        plan_sha = __import__("hashlib").sha256(plan).hexdigest()
++
++        record_audit(
++            self.session_id, "2.5", plan.decode(), self.report, "Claude Sonnet",
++            "COMPLETED", "PASS", audit_id="audit-002", subject_sha256=plan_sha,
++        )
++        record_audit(
++            self.session_id, "4.2", "plan plus context", self.report, "Claude Sonnet",
++            "COMPLETED", "PASS", audit_id="audit-003",
++        )
++        with self.assertRaisesRegex(ValueError, "No matching user"):
++            approve_plan_from_user_feedback(
++                self.session_id, "audit-002"
++            )
++        user_event = {
++            "type": "USER_INPUT",
++            "source": "USER_EXPLICIT",
++            "content": "<USER_REQUEST>AUDIT-REVIEWED audit-002 APPROVE_PLAN</USER_REQUEST>",
++        }
++        log_dir = os.path.join(state_dir, "logs")
++        os.makedirs(log_dir)
++        with open(os.path.join(log_dir, "transcript.jsonl"), "w", encoding="utf-8") as stream:
++            stream.write(json.dumps(user_event) + "\n")
++        self.assertEqual(
++            approve_plan_from_user_feedback(self.session_id, "audit-002"),
++            plan_sha,
++        )
++        with open(os.path.join(state_dir, "approved_plan.sha256"), encoding="ascii") as stream:
++            self.assertEqual(stream.read().strip(), plan_sha)
++
++        with open(plan_path, "ab") as stream:
++            stream.write(b"changed after review\n")
++        with open(plan_path, "rb") as stream:
++            changed_sha = hashlib.sha256(stream.read()).hexdigest()
++        with open(os.path.join(state_dir, "approved_plan.sha256"), encoding="ascii") as stream:
++            approved_sha = stream.read().strip()
++        self.assertNotEqual(changed_sha, approved_sha)
++
++
++if __name__ == "__main__":
++    unittest.main()
