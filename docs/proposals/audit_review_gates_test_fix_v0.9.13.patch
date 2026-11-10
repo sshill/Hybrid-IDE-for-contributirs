@@ -1,0 +1,26 @@
+diff --git a/core/verify/test_provenance_security.py b/core/verify/test_provenance_security.py
+index 3ecad22..3311577 100644
+--- a/core/verify/test_provenance_security.py
++++ b/core/verify/test_provenance_security.py
+@@ -1049,14 +1049,19 @@ class TestProvenanceSecurity(unittest.TestCase):
+         with open(prompt_file, "w", encoding="utf-8") as f:
+             f.write("Audit this plan.")
+         args = ["enclave_daemon.py", "--query", "ignored", "--query-file", prompt_file,
+-                "--mode", "audit", "--tier", "4", "--json-output"]
++                "--mode", "audit", "--tier", "4", "--audit-phase", "2.5",
++                "--session-id", self.session_id, "--json-output"]
+         response = {"status": "SUCCESS", "output": "answer"}
+         output = io.StringIO()
+         with mock.patch.object(sys, "argv", args), \
+                 mock.patch.object(ed, "enclave_query", return_value=response) as query, \
+                 contextlib.redirect_stdout(output):
+             self.assertEqual(ed.main(), 0)
+-        query.assert_called_once_with("Audit this plan.", tier=4.0, model=None, mode="audit")
++        query.assert_called_once_with(
++            "Audit this plan.", tier=4.0, model=None, mode="audit",
++            session_id=self.session_id, audit_phase="2.5",
++            subject_sha256=hashlib.sha256(b"Audit this plan.").hexdigest(),
++        )
+         self.assertEqual(json.loads(output.getvalue()), response)
+ 
+     def test_enclave_http_apply_contract(self):
