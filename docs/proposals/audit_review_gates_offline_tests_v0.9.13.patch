@@ -1,0 +1,61 @@
+diff --git a/core/verify/test_provenance_security.py b/core/verify/test_provenance_security.py
+index 3311577..a0d954f 100644
+--- a/core/verify/test_provenance_security.py
++++ b/core/verify/test_provenance_security.py
+@@ -888,7 +888,15 @@ class TestProvenanceSecurity(unittest.TestCase):
+ 
+     def test_enclave_battle_test_structure(self):
+         """37. Анклав: 4-Tier AI Battle Test повертає валідну структуру для всіх 4 рівнів."""
+-        results = run_battle_test()
++        import core.enclave.enclave_daemon as ed
++
++        with mock.patch.object(ed, "direct_query_ollama", return_value="pong") as ollama, \
++                mock.patch.object(ed, "direct_query_groq", return_value="pong") as groq, \
++                mock.patch.object(ed, "_load_env_keys"), \
++                mock.patch.object(ed, "query_all_tier_ai", return_value=("pong", "claude-sonnet", 4)) as claude, \
++                mock.patch.object(ed.shutil, "which", return_value="/fake/copilot"), \
++                mock.patch.object(ed, "direct_query_copilot", return_value=("pong", False)) as copilot:
++            results = run_battle_test()
+         self.assertIn("tier_1_ollama", results)
+         self.assertIn("tier_2_groq", results)
+         self.assertIn("tier_4_claude", results)
+@@ -896,6 +904,11 @@ class TestProvenanceSecurity(unittest.TestCase):
+         self.assertIn("status", results["tier_1_ollama"])
+         self.assertIn("status", results["tier_4_claude"])
+         self.assertIn("status", results["tier_4_5_copilot"])
++        self.assertEqual([result["status"] for result in results.values()], ["PASS"] * 4)
++        ollama.assert_called_once_with("respond 'pong'", model="qwen2.5-coder:1.5b", num_predict=10)
++        groq.assert_called_once_with("respond 'pong'", model="openai/gpt-oss-120b", max_tokens=10)
++        claude.assert_called_once_with("ping", tier=4, model="claude-3-5-sonnet-20241022")
++        copilot.assert_called_once_with("ping", mode="audit")
+ 
+     def test_enclave_antigravity_pool_attestation(self):
+         """38. Самодекларація арбітра не створює доказ аудиту."""
+@@ -1133,10 +1146,23 @@ class TestProvenanceSecurity(unittest.TestCase):
+ 
+     def test_enclave_copilot_failover_gate(self):
+         """40. Анклав: відмовостійкість (Failover Gate) — перехід з Copilot CLI на Claude Sonnet при вичерпанні квоти."""
+-        out, quota_err = direct_query_copilot("test prompt", mode="audit")
+-        self.assertIsInstance(quota_err, bool)
+-        ans, used_model, used_tier = query_all_tier_ai("Test audit prompt", tier=4.5)
+-        self.assertIn(used_tier, (4, 4.5, 2))
++        import core.enclave.enclave_daemon as ed
++
++        claude = mock.Mock(return_value=("Claude audit report", "Claude Sonnet", True))
++        with mock.patch.object(ed, "_resolve_core_imports", return_value=(None, {"query_claude": claude})), \
++                mock.patch.object(ed, "direct_query_copilot", return_value=("COPILOT_QUOTA_EXCEEDED", True)) as copilot, \
++                mock.patch.object(ed, "direct_query_groq") as groq, \
++                mock.patch.object(ed, "direct_query_openrouter") as openrouter:
++            ans, used_model, used_tier = query_all_tier_ai("Test audit prompt", tier=4.5, mode="audit")
++        self.assertEqual((ans, used_tier), ("Claude audit report", 4))
++        self.assertIn("Claude Sonnet", used_model)
++        copilot.assert_called_once_with("Test audit prompt", mode="audit")
++        claude.assert_called_once_with(
++            "Test audit prompt", mode="audit", model="claude-3-5-sonnet-20241022",
++            allow_copilot_fallback=False, return_metadata=True,
++        )
++        groq.assert_not_called()
++        openrouter.assert_not_called()
+ 
+     def test_copilot_audit_output_is_streamed_to_terminal(self):
+         import core.enclave.enclave_daemon as ed
