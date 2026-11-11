@@ -1,0 +1,159 @@
+--- a/core/engine/diagnostic_runner.py
++++ b/core/engine/diagnostic_runner.py
+@@ -631,6 +631,27 @@
+ 
+     elapsed = round(time.time() - start_time, 2)
+     if output_text:
++        status_content = (
++            f"AI_PROVIDER_STATUS: READY provider={provider_used} model={model} "
++            f"mode={mode} elapsed={elapsed} timestamp={time.time()}\n"
++        )
++        write_session_flag(
++            "ai_provider_status.flag",
++            status_content,
++            meta={
++                "status": "READY",
++                "provider": provider_used,
++                "model": model,
++                "mode": mode,
++                "elapsed_sec": elapsed,
++            },
++        )
++        if provider_used.startswith(("Anthropic API", "OpenRouter (anthropic/")):
++            flag_content = (
++                f"CLAUDE_VERIFIED: mode={mode} provider={provider_used} "
++                f"elapsed={elapsed} timestamp={time.time()}\n"
++            )
++            write_session_flag("claude_verified.flag", flag_content)
+         print(f"\n> [!NOTE]")
+         print(f"> **Виклик ШІ-моделі (AI Invocation Event):**")
+         print(f"> - **Провайдер / Модель:** {provider_used}")
+@@ -638,6 +659,11 @@
+         print(f"> - **Виконання:** COMPLETED; зміст вердикту оцінюється окремо\n")
+         return (output_text, provider_used, True) if return_metadata else output_text
+     else:
++        write_session_flag(
++            "ai_provider_status.flag",
++            f"AI_PROVIDER_STATUS: FAILED mode={mode} model={model} timestamp={time.time()}\n",
++            meta={"status": "FAILED", "provider": "none", "model": model, "mode": mode},
++        )
+         print(f"❌ Жоден із провайдерів Tier 4 Claude Sonnet не зміг відповісти за {elapsed} с.", file=sys.stderr)
+         failure = "CLAUDE_ALL_PROVIDERS_FAILED"
+         return (failure, "none", False) if return_metadata else failure
+--- a/core/enclave/enclave_daemon.py
++++ b/core/enclave/enclave_daemon.py
+@@ -585,7 +585,7 @@
+ 
+     # 6. Copilot CLI Probe
+     if not provider_name or provider_name == "copilot":
+-        cop_bin = shutil.which("copilot")
++        cop_bin = find_copilot_cli()
+         if not cop_bin:
+             results["copilot"] = {"status": "NOT_FOUND", "failover": "claude-3-5-sonnet (Tier 4 Arbiter)"}
+         else:
+@@ -613,18 +613,27 @@
+ 
+ 
+ 
++def find_copilot_cli():
++    """Return the available Copilot CLI path using the same locations as its callers."""
++    candidates = (
++        shutil.which("copilot"),
++        "/usr/local/bin/copilot",
++        "/usr/bin/copilot",
++        os.path.expanduser("~/.local/bin/copilot"),
++    )
++    for candidate in candidates:
++        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
++            return candidate
++    return None
++
++
+ def direct_query_copilot(prompt: str, mode: str = "audit") -> tuple[str, bool]:
+     """
+     Host-First виклик GitHub Copilot CLI з виявленням вичерпання квоти (Failover Gate)
+     та захистом від апаратного ліміту ядра Linux MAX_ARG_STRLEN (128 KB).
+     Повертає (output_text, is_quota_exceeded).
+     """
+-    copilot_bin = shutil.which("copilot")
+-    if not copilot_bin:
+-        for p in ("/usr/local/bin/copilot", "/usr/bin/copilot", os.path.expanduser("~/.local/bin/copilot")):
+-            if os.path.isfile(p) and os.access(p, os.X_OK):
+-                copilot_bin = p
+-                break
++    copilot_bin = find_copilot_cli()
+     if not copilot_bin:
+         return "COPILOT_NOT_FOUND", True
+ 
+--- a/core/enclave/ENCLAVE_INTERFACE.md
++++ b/core/enclave/ENCLAVE_INTERFACE.md
+@@ -125,6 +125,12 @@
+ від прямого запису інструментами агента. Старий прапорець або `POST /attest`
+ не може створити PASS чи підтвердження користувача.
+ 
++Успішний запит Tier 4 записує актуальний `ai_provider_status.flag` з фактичним
++провайдером; це діагностика доступності, не доказ аудиту. `claude_verified.flag`
++створюється лише для прямої відповіді Anthropic API або OpenRouter Claude, а не
++для Copilot CLI fallback. Зонд Copilot шукає виконуваний файл у `PATH`,
++`/usr/local/bin`, `/usr/bin` і `~/.local/bin`.
++
+ ## Інші операції
+ 
+ | CLI | HTTP | Дія |
+--- a/core/verify/test_provenance_security.py
++++ b/core/verify/test_provenance_security.py
+@@ -1164,6 +1164,54 @@
+         groq.assert_not_called()
+         openrouter.assert_not_called()
+ 
++    def test_provider_probe_finds_copilot_outside_path(self):
++        import core.enclave.enclave_daemon as ed
++
++        with mock.patch.object(ed, "_load_env_keys"), \
++                mock.patch.object(ed, "find_copilot_cli", return_value="/home/test/.local/bin/copilot"), \
++                mock.patch.object(ed, "direct_query_copilot", return_value=("COPILOT_TIMEOUT", True)) as copilot:
++            result = ed.probe_provider_auth("copilot")
++        self.assertEqual(result["copilot"]["status"], "FAILOVER_TRIGGERED")
++        self.assertEqual(
++            result["copilot"]["failover"],
++            "claude-3-5-sonnet (Tier 4 Arbiter)",
++        )
++        copilot.assert_called_once_with("ping", mode="audit")
++
++    def test_claude_provider_status_is_reported_without_claiming_copilot_as_claude(self):
++        import core.engine.diagnostic_runner as diagnostic_runner
++
++        response = io.BytesIO(json.dumps({
++            "content": [{"type": "text", "text": "pong"}],
++        }).encode("utf-8"))
++        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=True), \
++                mock.patch.object(diagnostic_runner.urllib.request, "urlopen", return_value=response), \
++                mock.patch.object(diagnostic_runner, "write_session_flag") as write_flag:
++            output, provider, executed = diagnostic_runner.query_claude_engine(
++                "ping", return_metadata=True
++            )
++        self.assertEqual((output, executed), ("pong", True))
++        self.assertIn("Anthropic API", provider)
++        written_flags = [call.args[0] for call in write_flag.call_args_list]
++        self.assertIn("ai_provider_status.flag", written_flags)
++        self.assertIn("claude_verified.flag", written_flags)
++
++        copilot_result = subprocess.CompletedProcess(
++            args=["copilot"], returncode=0, stdout="pong", stderr=""
++        )
++        with mock.patch.dict(os.environ, {}, clear=True), \
++                mock.patch.object(diagnostic_runner.shutil, "which", return_value="/fake/copilot"), \
++                mock.patch.object(diagnostic_runner.subprocess, "run", return_value=copilot_result), \
++                mock.patch.object(diagnostic_runner, "write_session_flag") as write_flag:
++            output, provider, executed = diagnostic_runner.query_claude_engine(
++                "ping", return_metadata=True
++            )
++        self.assertEqual((output, executed), ("pong", True))
++        self.assertIn("Copilot CLI", provider)
++        written_flags = [call.args[0] for call in write_flag.call_args_list]
++        self.assertIn("ai_provider_status.flag", written_flags)
++        self.assertNotIn("claude_verified.flag", written_flags)
++
+     def test_copilot_audit_output_is_streamed_to_terminal(self):
+         import core.enclave.enclave_daemon as ed
+ 
